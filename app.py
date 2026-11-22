@@ -50,23 +50,23 @@ def load_models(repo_id, revision):
     info = json.loads(info_path.read_text(encoding="utf-8"))
     expected = info["sklearn_version"]
     if sklearn.__version__ != expected:
-        raise ValueError(f"В requirements.txt поставь scikit-learn=={expected} "
-                         f"(установлена версия {sklearn.__version__}).")
+        raise ValueError(f"requirements.txt ішінде scikit-learn=={expected} орнатыңыз "
+                         f"(қазір {sklearn.__version__} орнатылған).")
 
     model_path = Path(hf_hub_download(repo_id, MODEL_FILE, revision=revision))
     with model_path.open("rb") as model_file:
         actual_sha256 = hashlib.file_digest(model_file, "sha256").hexdigest()
     if actual_sha256 != info["model_sha256"]:
-        raise ValueError(f"SHA-256 файла модели не совпал с {MODEL_INFO}.")
+        raise ValueError(f"Модель файлының SHA-256 мәні {MODEL_INFO} файлымен сәйкес келмеді.")
     sentiment_model = joblib.load(model_path)
     if 1 not in list(sentiment_model.classes_):
-        raise ValueError("В модели тональности нет класса 1 (positive).")
+        raise ValueError("Тональдылық моделінде 1-класс (positive) жоқ.")
 
     emo_info_path = Path(hf_hub_download(EMOTION_REPO, "emotion_model_info.json", revision=EMOTION_REVISION))
     emo_info = json.loads(emo_info_path.read_text(encoding="utf-8"))
     head = load_file(hf_hub_download(EMOTION_REPO, emo_info["head_file"], revision=EMOTION_REVISION))
     if head["weight"].shape[0] != len(emo_info["label_order"]):
-        raise ValueError("Число выходов головы эмоций не совпало с label_order.")
+        raise ValueError("Эмоция басының шығыс саны label_order-мен сәйкес келмеді.")
 
     torch.set_num_threads(2)
     tokenizer = XLMRobertaTokenizerFast.from_pretrained(EMOTION_REPO, revision=EMOTION_REVISION)
@@ -136,7 +136,7 @@ def predict_emotions(models, chunks):
             pooled = torch.nn.functional.normalize(pooled, dim=-1)
             logits = pooled @ head["weight"].T + head["bias"]
             if not torch.isfinite(logits).all().item():
-                raise ValueError("Модель эмоций вернула некорректные значения.")
+                raise ValueError("Эмоция моделі дұрыс емес мәндер қайтарды.")
             probs.append(torch.softmax(logits, dim=-1))
     return torch.cat(probs).numpy()
 
@@ -159,7 +159,7 @@ def analyze(models, text):
     budget = info["max_length"] - tokenizer.num_special_tokens_to_add(pair=False) - prefix_len - 2
     chunks = make_chunks(tokenizer, text, budget)
     if not chunks:
-        raise ValueError("После обработки не осталось текста для анализа.")
+        raise ValueError("Өңдеуден кейін талдауға мәтін қалмады.")
     weights = token_lengths(tokenizer, chunks)
     p_pos = predict_polarity(models["sentiment"], chunks)
     emo = predict_emotions(models, chunks)
@@ -180,19 +180,19 @@ def show_results(result, labels, labels_kk):
     right.caption(f"2-ші: {labels_kk[labels[order[1]]]} ({overall_emo[order[1]]:.0%})")
 
     if len(chunks) > 1 and (p_pos <= NEG_THRESHOLD).any() and (p_pos >= POS_THRESHOLD).any():
-        st.info("В тексте есть и явно положительные, и явно отрицательные фрагменты: отзыв смешанный.")
+        st.info("Мәтінде айқын оң да, айқын теріс те үзінділер бар: пікір аралас.")
 
-    st.write("**Распределение эмоций по всему тексту**")
+    st.write("**Бүкіл мәтін бойынша эмоциялардың таралуы**")
     st.bar_chart(pd.DataFrame({"Ықтималдық": overall_emo}, index=[labels_kk[l] for l in labels]))
 
     if len(chunks) > 1:
-        st.write(f"**Разбор по фрагментам** · {len(chunks)}")
+        st.write(f"**Үзінділер бойынша талдау** · {len(chunks)}")
         rows = []
         for i, chunk in enumerate(chunks):
             top = int(np.argmax(emo[i]))
             rows.append({
                 "№": i + 1,
-                "Фрагмент": chunk[:90] + ("…" if len(chunk) > 90 else ""),
+                "Үзінді": chunk[:90] + ("…" if len(chunk) > 90 else ""),
                 "Тональдылық": polarity_label(float(p_pos[i])),
                 "P(оң)": round(float(p_pos[i]), 2),
                 "Эмоция": labels_kk[labels[top]],
@@ -200,19 +200,23 @@ def show_results(result, labels, labels_kk):
             })
         st.dataframe(pd.DataFrame(rows), hide_index=True)
         most_neg, most_pos = int(np.argmin(p_pos)), int(np.argmax(p_pos))
-        with st.expander("Самый отрицательный и самый положительный фрагменты"):
-            st.markdown(f"**Самый отрицательный (№{most_neg + 1}, P(оң) = {p_pos[most_neg]:.2f}):** {chunks[most_neg]}")
-            st.markdown(f"**Самый положительный (№{most_pos + 1}, P(оң) = {p_pos[most_pos]:.2f}):** {chunks[most_pos]}")
+        neg_title = ("Ең теріс" if p_pos[most_neg] <= NEG_THRESHOLD
+                     else "Ең аз оң (айқын теріс үзінділер жоқ)")
+        pos_title = ("Ең оң" if p_pos[most_pos] >= POS_THRESHOLD
+                     else "Ең оңға жақын (айқын оң үзінділер жоқ)")
+        with st.expander("Тональдылығы бойынша шеткі үзінділер"):
+            st.markdown(f"**{neg_title} (№{most_neg + 1}, P(оң) = {p_pos[most_neg]:.2f}):** {chunks[most_neg]}")
+            st.markdown(f"**{pos_title} (№{most_pos + 1}, P(оң) = {p_pos[most_pos]:.2f}):** {chunks[most_pos]}")
 
-    st.caption("«Бейтарап» в тональности означает, что модель не уверена (пороги "
-               f"{NEG_THRESHOLD}–{POS_THRESHOLD}, эвристика), это не отдельный обученный класс. "
-               "Модель эмоций дообучена на небольшом наборе и оценена на пилоте из 60 текстов.")
+    st.caption("Тональдылықтағы «Бейтарап» белгісі модельдің сенімсіз екенін білдіреді "
+               f"(шектері {NEG_THRESHOLD}–{POS_THRESHOLD}, эвристика), бұл бөлек үйретілген класс емес. "
+               "Эмоция моделі шағын жиында үйретілген және 60 мәтіндік пилотта бағаланған.")
 
 
 def main():
     st.set_page_config(page_title="Kazakh NLP Analyzer", layout="centered")
     st.title("Kazakh NLP Analyzer")
-    st.caption("Тональность и эмоции казахских отзывов")
+    st.caption("Қазақ тіліндегі пікірлердің тональдылығы мен эмоциясын талдау")
 
     revision = "main"
     try:
@@ -221,7 +225,7 @@ def main():
     except StreamlitSecretNotFoundError:
         repo_id = ""
     if not repo_id:
-        st.info('Укажи SENTIMENT_REPO_ID = "имя/репозиторий" в настройках Secrets.')
+        st.info('Secrets баптауларында SENTIMENT_REPO_ID = "аты/репозиторий" көрсетіңіз.')
         return
 
     short = "Тапсырыс уақытында келді. Сапасы жақсы, маған ұнады!"
@@ -244,16 +248,16 @@ def main():
     base = " ".join([medium, negative, mixed])
     long = ((base + " ") * (MAX_CHARS // len(base) + 1))[: MAX_CHARS - 1] + "."
     presets = {
-        "Короткий позитивный": short,
-        "Средний отзыв": medium,
-        "Негативный отзыв": negative,
-        "Смешанный отзыв": mixed,
-        "Длинный текст (3 000 символов)": long,
+        "Қысқа оң пікір": short,
+        "Орташа пікір": medium,
+        "Теріс пікір": negative,
+        "Аралас пікір": mixed,
+        "Ұзын мәтін (3 000 таңба)": long,
     }
 
-    example = st.selectbox("Пример для проверки", presets)
+    example = st.selectbox("Тексеруге арналған мысал", presets)
     with st.form("analysis"):
-        raw_text = st.text_area("Казахский текст", value=presets[example], key=example,
+        raw_text = st.text_area("Қазақша мәтін", value=presets[example], key=example,
                                 max_chars=MAX_CHARS, height=180)
         submitted = st.form_submit_button("Талдау", type="primary")
     if not submitted:
@@ -261,18 +265,18 @@ def main():
 
     text = clean_text(raw_text)
     if not text:
-        st.warning("Введи текст для анализа.")
+        st.warning("Талдау үшін мәтін енгізіңіз.")
         return
 
     started = perf_counter()
-    with st.spinner("Загружаем модели и анализируем текст…"):
+    with st.spinner("Модельдер жүктелуде, мәтін талданып жатыр…"):
         try:
             models = load_models(repo_id.strip(), revision)
             loaded = perf_counter()
             result = analyze(models, text)
         except (ImportError, OSError, RuntimeError, ValueError, KeyError) as exc:
             logging.getLogger(__name__).exception("Не удалось загрузить модели или обработать текст")
-            st.error(f"Анализ остановился. {exc}")
+            st.error(f"Талдау тоқтап қалды. {exc}")
             return
     finished = perf_counter()
 
@@ -280,12 +284,12 @@ def main():
     show_results(result, info["label_order"], info["label_names_kk"])
 
     peak_mib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
-    with st.expander("Техническая информация"):
-        st.write(f"**Символы** · {len(raw_text)}  **Токены** · {sum(result['weights'])}  "
-                 f"**Фрагменты** · {len(result['chunks'])}")
-        st.write(f"**Максимум в одном фрагменте** · {result['max_chunk_tokens']}/{info['max_length']} токенов")
-        st.write(f"**Загрузка** · {loaded - started:.2f} с  **Анализ** · {finished - loaded:.2f} с")
-        st.write(f"**Пиковый RSS процесса** · {peak_mib:,.0f} МиБ  **PyTorch** · {torch.__version__}")
+    with st.expander("Техникалық ақпарат"):
+        st.write(f"**Таңбалар** · {len(raw_text)}  **Токендер** · {sum(result['weights'])}  "
+                 f"**Үзінділер** · {len(result['chunks'])}")
+        st.write(f"**Бір үзіндідегі максимум** · {result['max_chunk_tokens']}/{info['max_length']} токен")
+        st.write(f"**Жүктеу** · {loaded - started:.2f} сек  **Талдау** · {finished - loaded:.2f} сек")
+        st.write(f"**Процестің ең жоғары RSS** · {peak_mib:,.0f} МиБ  **PyTorch** · {torch.__version__}")
 
 
 if __name__ == "__main__":
