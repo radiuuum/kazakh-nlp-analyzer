@@ -2,6 +2,7 @@
 
 import base64
 import hashlib
+import html
 import json
 import logging
 import re
@@ -28,7 +29,7 @@ EMOTION_REVISION = "39ab9bbdfd12dcdda4313fdb9f13a07bfdd7f6e1"
 MAX_CHARS = 3_000
 BATCH_SIZE = 8
 # Порог полярности подобран на validation (threshold_polarity_v3.json):
-# P(positive) >= 0.66 -> positive. Полоса «Бейтарап» шириной ±0.10 вокруг порога
+# P(positive) >= 0.66 -> positive. Полоса «Анықталмады» шириной ±0.10 вокруг порога
 # это эвристика, а не отдельный обученный класс.
 POLARITY_THRESHOLD = 0.66
 NEUTRAL_HALF_WIDTH = 0.10
@@ -81,8 +82,10 @@ def load_models(repo_id, revision):
     info = json.loads(info_path.read_text(encoding="utf-8"))
     expected = info["sklearn_version"]
     if sklearn.__version__ != expected:
-        raise ValueError(f"requirements.txt ішінде scikit-learn=={expected} орнатыңыз "
-                         f"(қазір {sklearn.__version__} орнатылған).")
+        raise ValueError(
+            f"requirements.txt ішінде scikit-learn=={expected} орнатыңыз "
+            f"(қазір {sklearn.__version__} орнатылған)."
+        )
 
     model_path = Path(hf_hub_download(repo_id, MODEL_FILE, revision=revision))
     with model_path.open("rb") as model_file:
@@ -102,8 +105,13 @@ def load_models(repo_id, revision):
     torch.set_num_threads(2)
     tokenizer = XLMRobertaTokenizerFast.from_pretrained(EMOTION_REPO, revision=EMOTION_REVISION)
     encoder = BertModel.from_pretrained(EMOTION_REPO, revision=EMOTION_REVISION, use_safetensors=True).eval()
-    return {"sentiment": sentiment_model, "tokenizer": tokenizer, "encoder": encoder,
-            "head": head, "emo_info": emo_info}
+    return {
+        "sentiment": sentiment_model,
+        "tokenizer": tokenizer,
+        "encoder": encoder,
+        "head": head,
+        "emo_info": emo_info,
+    }
 
 
 def split_sentences(text):
@@ -155,14 +163,23 @@ def predict_polarity(model, chunks):
 def predict_emotions(models, chunks):
     import torch
 
-    info, tokenizer, encoder, head = (models["emo_info"], models["tokenizer"],
-                                      models["encoder"], models["head"])
+    info, tokenizer, encoder, head = (
+        models["emo_info"],
+        models["tokenizer"],
+        models["encoder"],
+        models["head"],
+    )
     probs = []
     with torch.inference_mode():
         for start in range(0, len(chunks), BATCH_SIZE):
             batch = [info["tokenizer_prefix"] + chunk for chunk in chunks[start : start + BATCH_SIZE]]
-            inputs = tokenizer(batch, padding=True, truncation=True,
-                               max_length=info["max_length"], return_tensors="pt")
+            inputs = tokenizer(
+                batch,
+                padding=True,
+                truncation=True,
+                max_length=info["max_length"],
+                return_tensors="pt",
+            )
             hidden = encoder(**inputs).last_hidden_state
             mask = inputs["attention_mask"].unsqueeze(-1).float()
             pooled = (hidden * mask).sum(dim=1) / mask.sum(dim=1).clamp(min=1)
@@ -186,6 +203,16 @@ def polarity_label(p_pos):
     return "Анықталмады"
 
 
+def _tone_badge_class(label):
+    return {
+        "Оң": "nlp-badge-pos",
+        "Теріс": "nlp-badge-neg",
+        "Аралас": "nlp-badge-mixed",
+        "Бейтарап": "nlp-badge-neutral",
+        "Анықталмады": "nlp-badge-neutral",
+    }.get(label, "nlp-badge-neutral")
+
+
 def analyze(models, text):
     tokenizer, info = models["tokenizer"], models["emo_info"]
     prefix_len = token_lengths(tokenizer, [info["tokenizer_prefix"].strip()])[0]
@@ -196,8 +223,13 @@ def analyze(models, text):
     weights = token_lengths(tokenizer, chunks)
     p_pos = predict_polarity(models["sentiment"], chunks)
     emo = predict_emotions(models, chunks)
-    return {"chunks": chunks, "weights": weights, "p_pos": p_pos, "emo": emo,
-            "max_chunk_tokens": max(weights) + prefix_len + tokenizer.num_special_tokens_to_add(pair=False)}
+    return {
+        "chunks": chunks,
+        "weights": weights,
+        "p_pos": p_pos,
+        "emo": emo,
+        "max_chunk_tokens": max(weights) + prefix_len + tokenizer.num_special_tokens_to_add(pair=False),
+    }
 
 
 def show_results(result, labels, labels_kk):
@@ -208,21 +240,82 @@ def show_results(result, labels, labels_kk):
     mixed = p_pos[most_neg] <= NEG_THRESHOLD and p_pos[most_pos] >= POS_THRESHOLD
     chunk_emotions = [labels_kk[labels[index]] for index in np.argmax(emo, axis=1)]
 
-    left, right = st.columns(2)
-    left.metric("Тональдылық", "Аралас" if mixed else polarity_label(overall_pos))
-    left.caption(f"Орташа P(оң) = {overall_pos:.2f}")
-    if mixed:
-        right.write("**Үзінділердегі эмоция белгілері**")
-        right.write(f"Теріс үзінді №{most_neg + 1} · {chunk_emotions[most_neg]}")
-        right.write(f"Оң үзінді №{most_pos + 1} · {chunk_emotions[most_pos]}")
-    else:
-        right.metric("Эмоцияның басым белгісі", labels_kk[labels[int(np.argmax(overall_emo))]])
+    tone_text = "Аралас" if mixed else polarity_label(overall_pos)
+    tone_cls = _tone_badge_class(tone_text)
+    marker_pct = max(2.0, min(98.0, overall_pos * 100.0))
 
-    st.subheader("Эмоция моделінің бағалары")
+    if mixed:
+        right_body = f"""
+            <div class="nlp-card-label">Үзінділердегі контраст эмоциялар</div>
+            <div class="nlp-mixed-list">
+                <div class="nlp-mixed-item">
+                    <span>Теріс үзінді №{most_neg + 1}</span>
+                    <strong>{html.escape(chunk_emotions[most_neg])}</strong>
+                </div>
+                <div class="nlp-mixed-item">
+                    <span>Оң үзінді №{most_pos + 1}</span>
+                    <strong>{html.escape(chunk_emotions[most_pos])}</strong>
+                </div>
+            </div>
+            <div class="nlp-subnote">Мәтінде айқын оң және айқын теріс үзінділер қатар табылды.</div>
+        """
+    else:
+        top_idx = int(np.argmax(overall_emo))
+        top_emo = labels_kk[labels[top_idx]]
+        top_score = float(overall_emo[top_idx]) * 100.0
+        right_body = f"""
+            <div class="nlp-card-label">Эмоцияның басым белгісі (E5)</div>
+            <div class="nlp-card-value-row">
+                <span class="nlp-card-value">{html.escape(top_emo)}</span>
+                <span class="nlp-score">{top_score:.1f}%</span>
+            </div>
+            <div class="nlp-subnote">
+                Үзінділер бойынша токен санымен өлшенген орташа баға.
+                Модель ықтималдықтары бөлек калибрленбеген.
+            </div>
+        """
+
+    st.html(f"""
+        <section class="nlp-grid-2" lang="kk">
+            <div class="nlp-card">
+                <div class="nlp-card-label">Тональдылық (TF-IDF + LogReg)</div>
+                <div class="nlp-card-value-row">
+                    <span class="nlp-card-value">{html.escape(tone_text)}</span>
+                    <span class="nlp-badge {tone_cls}">P(оң) = {overall_pos:.2f}</span>
+                </div>
+                <div class="nlp-scale-wrap">
+                    <div class="nlp-scale-track">
+                        <div class="nlp-scale-threshold" title="Шек {POLARITY_THRESHOLD:.2f}"></div>
+                        <div class="nlp-scale-marker" style="left: {marker_pct:.1f}%;"></div>
+                    </div>
+                    <div class="nlp-scale-ticks">
+                        <span>0.00 Теріс</span>
+                        <span>{NEG_THRESHOLD:.2f}–{POS_THRESHOLD:.2f} шек ({POLARITY_THRESHOLD:.2f})</span>
+                        <span>1.00 Оң</span>
+                    </div>
+                </div>
+            </div>
+            <div class="nlp-card">
+                {right_body}
+            </div>
+        </section>
+    """)
+
+    st.html("""
+        <div class="nlp-section-head">
+            <h3>Эмоция моделінің бағалары</h3>
+            <span>E5-small · 6 санат</span>
+        </div>
+    """)
     show_emotion_chart(labels, labels_kk, overall_emo)
 
     if len(chunks) > 1:
-        st.write(f"**Үзінділер бойынша талдау** · {len(chunks)}")
+        st.html(f"""
+            <div class="nlp-section-head">
+                <h3>Үзінділер бойынша талдау</h3>
+                <span>{len(chunks)} үзінді · {sum(weights)} токен</span>
+            </div>
+        """)
         rows = []
         for i, chunk in enumerate(chunks):
             top = int(np.argmax(emo[i]))
@@ -234,19 +327,47 @@ def show_results(result, labels, labels_kk):
                 "Эмоция": chunk_emotions[i],
                 "Модель бағасы": round(float(emo[i][top]), 2),
             })
-        st.dataframe(pd.DataFrame(rows), hide_index=True)
-        neg_title = ("Ең теріс" if p_pos[most_neg] <= NEG_THRESHOLD
-                     else "Ең аз оң (айқын теріс үзінділер жоқ)")
-        pos_title = ("Ең оң" if p_pos[most_pos] >= POS_THRESHOLD
-                     else "Ең оңға жақын (айқын оң үзінділер жоқ)")
-        with st.expander("Тональдылығы бойынша шеткі үзінділер"):
-            st.markdown(f"**{neg_title} (№{most_neg + 1}, P(оң) = {p_pos[most_neg]:.2f}):** {chunks[most_neg]}")
-            st.markdown(f"**{pos_title} (№{most_pos + 1}, P(оң) = {p_pos[most_pos]:.2f}):** {chunks[most_pos]}")
+        st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
 
-    st.caption("Тональдылық «Анықталмады» деп көрсетілсе, модель бағасы белгісіздік аймағында. "
-               f"Негізгі шек {POLARITY_THRESHOLD} валидацияда таңдалған, "
-               f"ал ±{NEUTRAL_HALF_WIDTH} аймағы эвристикалық ережемен берілген. "
-               "Эмоция моделі шағын жиында үйретілген және 60 мәтіндік пилотта бағаланған.")
+        neg_title = (
+            "Ең теріс үзінді"
+            if p_pos[most_neg] <= NEG_THRESHOLD
+            else "Ең аз оң үзінді (айқын теріс жоқ)"
+        )
+        pos_title = (
+            "Ең оң үзінді"
+            if p_pos[most_pos] >= POS_THRESHOLD
+            else "Ең оңға жақын үзінді (айқын оң жоқ)"
+        )
+        with st.expander("Тональдылығы бойынша шеткі үзінділер"):
+            st.html(f"""
+                <div class="nlp-excerpt-grid">
+                    <div class="nlp-excerpt nlp-excerpt-neg">
+                        <div class="nlp-excerpt-meta">
+                            <span>{html.escape(neg_title)} · №{most_neg + 1}</span>
+                            <code>P(оң) = {p_pos[most_neg]:.2f}</code>
+                        </div>
+                        <p>{html.escape(chunks[most_neg])}</p>
+                    </div>
+                    <div class="nlp-excerpt nlp-excerpt-pos">
+                        <div class="nlp-excerpt-meta">
+                            <span>{html.escape(pos_title)} · №{most_pos + 1}</span>
+                            <code>P(оң) = {p_pos[most_pos]:.2f}</code>
+                        </div>
+                        <p>{html.escape(chunks[most_pos])}</p>
+                    </div>
+                </div>
+            """)
+
+    st.html(f"""
+        <div class="nlp-footnote">
+            Тональдылық <strong>«Анықталмады»</strong> деп шықса, баға белгісіздік аймағында
+            (<span class="nlp-mono">{NEG_THRESHOLD:.2f}–{POS_THRESHOLD:.2f}</span>).
+            Негізгі шек <span class="nlp-mono">{POLARITY_THRESHOLD:.2f}</span> валидацияда таңдалған,
+            ал <span class="nlp-mono">±{NEUTRAL_HALF_WIDTH:.2f}</span> жолағы эвристикалық ережемен берілген.
+            Эмоция моделі шағын жиында үйретілген және 60 мәтіндік пилотта бағаланған.
+        </div>
+    """)
 
 
 def show_emotion_chart(labels, labels_kk, scores):
@@ -256,25 +377,41 @@ def show_emotion_chart(labels, labels_kk, scores):
         "emotion": [labels_kk[label] for label in labels],
         "score": scores,
         "leading": np.arange(len(scores)) == int(np.argmax(scores)),
-    })
+    }).sort_values("score", ascending=False, kind="mergesort")
+
+    order = data["emotion"].tolist()
+    base = alt.Chart(data).encode(
+        y=alt.Y(
+            "emotion:N",
+            title=None,
+            sort=order,
+            axis=alt.Axis(labelLimit=140, labelPadding=10, ticks=False, domain=False),
+        ),
+        x=alt.X(
+            "score:Q",
+            scale=alt.Scale(domain=[0, 1.12]),
+            axis=alt.Axis(format=".0%", title=None, tickCount=5, ticks=False, domain=False),
+        ),
+    )
+    bars = base.mark_bar(cornerRadiusEnd=6, height=18).encode(
+        color=alt.condition("datum.leading", alt.value("#0052FF"), alt.value("#CBD5E1")),
+        tooltip=[
+            alt.Tooltip("emotion:N", title="Эмоция"),
+            alt.Tooltip("score:Q", title="Орташа баға", format=".1%"),
+        ],
+    )
+    labels_layer = base.mark_text(
+        align="left", baseline="middle", dx=8, fontSize=12, fontWeight="bold"
+    ).encode(
+        text=alt.Text("score:Q", format=".1%"),
+        color=alt.condition("datum.leading", alt.value("#0052FF"), alt.value("#475569")),
+    )
     chart = (
-        alt.Chart(data)
-        .mark_bar(cornerRadiusEnd=5, size=17)
-        .encode(
-            y=alt.Y("emotion:N", title=None, sort="-x",
-                    axis=alt.Axis(labelLimit=130)),
-            x=alt.X("score:Q", scale=alt.Scale(domain=[0, 1]),
-                    axis=alt.Axis(format=".0%", title=None, tickCount=5)),
-            color=alt.condition("datum.leading", alt.value("#17624f"), alt.value("#749286")),
-            tooltip=[
-                alt.Tooltip("emotion:N", title="Эмоция"),
-                alt.Tooltip("score:Q", title="Орташа баға", format=".1%"),
-            ],
-        )
-        .properties(height=206)
-        .configure(background="transparent")
+        (bars + labels_layer)
+        .properties(height=216)
+        .configure(background="transparent", font="Inter, NLP Sans, sans-serif")
         .configure_view(stroke=None)
-        .configure_axis(labelFontSize=12, labelColor="#294137", gridColor="#ded9c8")
+        .configure_axis(labelFontSize=12, labelColor="#334155", gridColor="#E2E8F0", gridDash=[3, 3])
     )
     st.altair_chart(chart, width="stretch", theme=None)
 
@@ -287,51 +424,76 @@ def show_header():
         for placeholder, filename in (
             ("__SANS__", "noto-sans.woff"),
             ("__SANS_BOLD__", "noto-sans-bold.woff"),
-            ("__SERIF__", "noto-serif-bold.woff"),
         ):
             font = assets / filename
             if font.is_file():
                 css = css.replace(placeholder, base64.b64encode(font.read_bytes()).decode("ascii"))
         st.html(f"<style>{css}</style>")
 
-    artwork = assets / "review-panorama.webp"
-    description = "Қазақ тіліндегі пікірлердің тональдылығы мен эмоциялық реңкін талдауға арналған оқу жобасы."
-    if not artwork.is_file():
-        st.title("Kazakh NLP Analyzer")
-        st.write(description)
-        return
-
-    encoded = base64.b64encode(artwork.read_bytes()).decode("ascii")
     st.html(f"""
-        <header class="nlp-cover" lang="kk">
-            <img alt="" src="data:image/webp;base64,{encoded}">
-            <div class="nlp-copy">
-                <h1 lang="en">Kazakh NLP<br>Analyzer</h1>
-                <p>{description}</p>
+        <header class="nlp-header" lang="kk">
+            <div class="nlp-header-main">
+                <div class="nlp-kicker">
+                    <span class="nlp-kicker-dot"></span>
+                    Kazakh NLP · Оқу-зерттеу жобасы
+                </div>
+                <h1 lang="en">Kazakh NLP Analyzer</h1>
+                <p>Қазақ тіліндегі пікірлердің тональдылығы мен эмоциялық реңкін
+                   меншікті ML-модельдер және Gemini API арқылы талдау құралы.</p>
+            </div>
+            <div class="nlp-meta-strip">
+                <div class="nlp-meta-pill">KazSAnDRA <strong>F1 0.801</strong></div>
+                <div class="nlp-meta-pill">Шек <strong>{POLARITY_THRESHOLD:.2f}</strong></div>
+                <div class="nlp-meta-pill">E5 пилот <strong>0.722</strong></div>
+                <div class="nlp-meta-pill">Gemini <strong>қаз / орыс</strong></div>
             </div>
         </header>
     """)
 
 
 def show_project_details():
-    st.html("""
+    st.html(f"""
         <aside class="nlp-project" lang="kk" aria-labelledby="nlp-project-title">
-            <h2 id="nlp-project-title">Жоба туралы</h2>
+            <div class="nlp-project-head">
+                <h2 id="nlp-project-title">Жоба туралы</h2>
+                <span class="nlp-project-tag">v3 · 2026</span>
+            </div>
+            <div class="nlp-pipeline">
+                <span class="step">Мәтін</span> →
+                <span class="step">Үзінділер</span> →
+                <span class="step">TF-IDF + E5</span> /
+                <span class="step">Gemini</span>
+            </div>
             <dl>
                 <div>
-                    <dt>Пікірдің тональдылығы</dt>
-                    <dd>TF-IDF және логистикалық регрессия. KazSAnDRA деректеріндегі 16&nbsp;797 пікір
-                        бойынша екі класқа жіктеу нәтижесі — <span class="nlp-score">macro F1 0,801</span>.</dd>
+                    <dt>
+                        <span>Пікірдің тональдылығы</span>
+                        <span class="nlp-score">F1 0.8014</span>
+                    </dt>
+                    <dd>TF-IDF және логистикалық регрессия. KazSAnDRA тестіндегі
+                        <span class="nlp-mono">16 797</span> бүтін пікірде шекті
+                        <span class="nlp-mono">0.50 → {POLARITY_THRESHOLD:.2f}</span> ауыстыру macro F1 мәнін
+                        <span class="nlp-mono">0.7819</span>-дан <span class="nlp-mono">0.8014</span>-ке өсірді
+                        (теріс класс recall: <span class="nlp-mono">0.539 → 0.669</span>).</dd>
                 </div>
                 <div>
-                    <dt>Мәтіннің эмоциялық реңкі</dt>
-                    <dd>Қосымша үйретілген E5 моделі алты эмоциялық санатты ажыратады.
-                        Пилоттық бағалау 60 синтетикалық мәтінде жүргізілді.</dd>
+                    <dt>
+                        <span>Эмоциялық реңк (E5)</span>
+                        <span class="nlp-score">43 / 60</span>
+                    </dt>
+                    <dd>Қосымша үйретілген E5-small алты эмоцияны бағалайды.
+                        Қазақша синтетикалық пилотта (<span class="nlp-mono">60</span> мәтін)
+                        macro F1 <span class="nlp-mono">0.436 → 0.722</span> өсті
+                        (салыстыру: Kaz-RoBERTa — <span class="nlp-mono">45/60</span>, F1 <span class="nlp-mono">0.753</span>).</dd>
                 </div>
                 <div>
-                    <dt>Gemini арқылы талдау</dt>
-                    <dd>Қазақша және орысша мәтіннің тақырыбын, қысқаша мазмұнын, тональдылығы мен
-                        эмоцияларын көрсетеді.</dd>
+                    <dt>
+                        <span>Gemini арқылы талдау</span>
+                        <span class="nlp-score">20 000 таңба</span>
+                    </dt>
+                    <dd>Қазақша және орысша ұзын мәтіндердің тақырыбын, қысқаша мазмұнын,
+                        тональдылығы мен эмоцияларын береді. Тек бастапқы мәтінде дәл кездесетін
+                        дәйексөздер ғана сақталады.</dd>
                 </div>
             </dl>
         </aside>
@@ -341,11 +503,16 @@ def show_project_details():
 def main():
     st.set_page_config(page_title="Kazakh NLP Analyzer", layout="wide")
     show_header()
-    review_mode, gemini_mode = "Пікірді талдау", "Gemini арқылы талдау"
+    review_mode, gemini_mode = "Қазақша пікір (TF-IDF + E5)", "Gemini арқылы талдау"
     with st.container(key="nlp_workspace"):
-        workspace, project = st.columns([2.2, 1], gap="medium")
+        workspace, project = st.columns([2.25, 1], gap="large")
         with workspace:
-            mode = st.radio("Талдау түрі", (review_mode, gemini_mode), horizontal=True)
+            mode = st.radio(
+                "Талдау түрі",
+                (review_mode, gemini_mode),
+                horizontal=True,
+                label_visibility="collapsed",
+            )
             if mode == gemini_mode:
                 show_gemini_mode()
             else:
@@ -355,10 +522,13 @@ def main():
 
 
 def show_gemini_mode():
-    st.caption("Gemini мәтіннің тақырыбын, тональдылығы мен эмоцияларын анықтап, қысқаша мазмұнын береді.")
+    st.caption("Gemini қазақша немесе орысша мәтіннің тақырыбын, тональдылығы мен эмоцияларын анықтап, қысқаша мазмұнын береді.")
     try:
         from gemini_analysis import (
-            DEFAULT_MODEL, MAX_TEXT_CHARS, GeminiAnalysisError, analyze_with_gemini,
+            DEFAULT_MODEL,
+            MAX_TEXT_CHARS,
+            GeminiAnalysisError,
+            analyze_with_gemini,
         )
     except ImportError:
         st.error("Gemini режимі үшін google-genai пакетін орнатыңыз.")
@@ -376,7 +546,9 @@ def show_gemini_mode():
 
     with st.form("gemini_analysis"):
         raw_text = st.text_area(
-            "Қазақша немесе орысша мәтін", max_chars=MAX_TEXT_CHARS, height=220,
+            "Қазақша немесе орысша мәтін",
+            max_chars=MAX_TEXT_CHARS,
+            height=220,
             placeholder="Талдауға арналған мәтінді осында енгізіңіз…",
         )
         st.caption("Талдау батырмасын басқанда мәтін Google Gemini API қызметіне жіберіледі.")
@@ -397,18 +569,58 @@ def show_gemini_mode():
             return
 
     tone_labels = {"positive": "Оң", "negative": "Теріс", "neutral": "Бейтарап", "mixed": "Аралас"}
-    st.subheader("Тақырып")
-    st.text(result.topic)
-    st.subheader("Қысқаша мазмұн")
-    st.text(result.summary)
-    st.metric("Тональдылық", tone_labels[result.tone])
-    st.subheader("Мәтіндегі эмоциялар")
+    tone_kk = tone_labels[result.tone]
+    tone_cls = _tone_badge_class(tone_kk)
+
+    st.html(f"""
+        <section class="nlp-grid-2" lang="kk">
+            <div class="nlp-card">
+                <div class="nlp-card-label">Тақырып</div>
+                <div class="nlp-card-value" style="font-size: 1.12rem; line-height: 1.38;">
+                    {html.escape(result.topic)}
+                </div>
+            </div>
+            <div class="nlp-card">
+                <div class="nlp-card-label">Тональдылық (Gemini)</div>
+                <div class="nlp-card-value-row">
+                    <span class="nlp-card-value">{html.escape(tone_kk)}</span>
+                    <span class="nlp-badge {tone_cls}">{html.escape(model)}</span>
+                </div>
+            </div>
+        </section>
+        <div class="nlp-card" style="margin-bottom: 1rem;">
+            <div class="nlp-card-label">Қысқаша мазмұн</div>
+            <p style="margin: 0; font-size: 0.94rem; line-height: 1.62; color: #334155;">
+                {html.escape(result.summary)}
+            </p>
+        </div>
+    """)
+
+    st.html("""
+        <div class="nlp-section-head">
+            <h3>Мәтіндегі эмоциялар мен дәйексөздер</h3>
+            <span>Тікелей дәйексөз тексерісі</span>
+        </div>
+    """)
     if result.emotions:
+        cards = []
         for emotion in result.emotions:
-            st.text(f"{emotion.label} — «{emotion.quote}»")
+            cards.append(f"""
+                <div class="nlp-quote-card">
+                    <div class="nlp-quote-top">
+                        <span class="nlp-quote-emotion">{html.escape(emotion.label)}</span>
+                        <span class="nlp-quote-verified">✓ Мәтінде расталды</span>
+                    </div>
+                    <p class="nlp-quote-text">«{html.escape(emotion.quote)}»</p>
+                </div>
+            """)
+        st.html(f'<div class="nlp-quote-list">{"".join(cards)}</div>')
     else:
-        st.write("Мәтінде айқын эмоция анықталмады.")
-    st.caption(f"Модель · {model}")
+        st.info("Мәтінде айқын эмоция анықталмады.")
+
+
+def _apply_preset(sample_text):
+    st.session_state["review_text_input"] = sample_text
 
 
 def show_review_mode():
@@ -423,6 +635,7 @@ def show_review_mode():
         return
 
     short = "Тапсырыс уақытында келді. Сапасы жақсы, маған ұнады!"
+    short_mixed = "Жеткізу кешікті, бірақ тауар ұнады."
     medium = (
         "Тапсырысым екі күн кешігіп келді. Алғашында қолдау қызметінен жауап ала алмадым. "
         "Кейін қызметкер хабарласып, жағдайды түсіндірді. Тауардың сапасы жақсы екен. "
@@ -439,20 +652,54 @@ def show_review_mode():
         "Қорабы мыжылып келді, ішінде бір бөлшек жетіспеді. Қолдау қызметі сол күні хабарласып, "
         "ертеңіне жетіспеген бөлшекті жіберді. Қазір үстелді пайдаланып жүрмін."
     )
-    presets = {
-        "Қысқа оң пікір": short,
-        "Орташа пікір": medium,
-        "Теріс пікір": negative,
-        "Аралас пікір": mixed,
-        "Ұзын пікір (үстел)": LONG_REVIEW,
-        "Ұзын мәтін (коммуналдық төлем)": LONG_STORY,
-    }
+    presets = [
+        ("Оң пікір", short),
+        ("Теріс пікір", negative),
+        ("Қысқа аралас", short_mixed),
+        ("Аралас пікір", mixed),
+        ("Орташа пікір", medium),
+        ("Ұзын пікір (үстел)", LONG_REVIEW),
+    ]
 
-    with st.expander("Пікір үлгілері"):
-        example = st.selectbox("Үлгі", list(presets), index=None, placeholder="Үлгіні таңдаңыз")
+    if "review_text_input" not in st.session_state:
+        st.session_state["review_text_input"] = ""
+
+    st.html('<div class="nlp-preset-label">Жылдам тексеру үлгілері</div>')
+    with st.container(key="nlp_presets"):
+        for row_start in range(0, len(presets), 3):
+            cols = st.columns(3, gap="small")
+            for col, (label, sample) in zip(cols, presets[row_start : row_start + 3]):
+                col.button(
+                    label,
+                    key=f"preset_{label}",
+                    on_click=_apply_preset,
+                    args=(sample,),
+                    width="stretch",
+                )
+        extra_left, extra_right = st.columns([2, 1], gap="small")
+        extra_left.button(
+            "Ұзын мәтін (коммуналдық төлем)",
+            key="preset_long_story",
+            on_click=_apply_preset,
+            args=(LONG_STORY,),
+            width="stretch",
+        )
+        extra_right.button(
+            "Тазалау",
+            key="preset_clear",
+            on_click=_apply_preset,
+            args=("",),
+            width="stretch",
+        )
+
     with st.form("analysis"):
-        raw_text = st.text_area("Қазақша пікір", value=presets.get(example, ""), key=f"review_{example}",
-                                max_chars=MAX_CHARS, height=180, placeholder="Пікір мәтінін енгізіңіз…")
+        raw_text = st.text_area(
+            "Қазақша пікір",
+            key="review_text_input",
+            max_chars=MAX_CHARS,
+            height=190,
+            placeholder="Пікір мәтінін осында енгізіңіз немесе жоғарыдағы үлгіні таңдаңыз…",
+        )
         submitted = st.form_submit_button("Талдау", type="primary")
     if not submitted:
         return
@@ -480,8 +727,10 @@ def show_review_mode():
     peak_mib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
     with st.expander("Техникалық ақпарат"):
         st.write("Тональдылық моделі — TF-IDF және логистикалық регрессия. Эмоция моделі — E5.")
-        st.write(f"**Таңбалар** · {len(raw_text)}  **Токендер** · {sum(result['weights'])}  "
-                 f"**Үзінділер** · {len(result['chunks'])}")
+        st.write(
+            f"**Таңбалар** · {len(raw_text)}  **Токендер** · {sum(result['weights'])}  "
+            f"**Үзінділер** · {len(result['chunks'])}"
+        )
         st.write(f"**Бір үзіндідегі максимум** · {result['max_chunk_tokens']}/{info['max_length']} токен")
         st.write(f"**Жүктеу** · {loaded - started:.2f} сек  **Талдау** · {finished - loaded:.2f} сек")
         st.write(f"**Процестің ең жоғары RSS** · {peak_mib:,.0f} МиБ  **PyTorch** · {version('torch')}")
