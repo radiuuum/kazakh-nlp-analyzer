@@ -203,14 +203,14 @@ def polarity_label(p_pos):
     return "Анықталмады"
 
 
-def _tone_badge_class(label):
+def _tone_classes(label):
     return {
-        "Оң": "nlp-badge-pos",
-        "Теріс": "nlp-badge-neg",
-        "Аралас": "nlp-badge-mixed",
-        "Бейтарап": "nlp-badge-neutral",
-        "Анықталмады": "nlp-badge-neutral",
-    }.get(label, "nlp-badge-neutral")
+        "Оң": ("nlp-badge-pos", "nlp-card-pos"),
+        "Теріс": ("nlp-badge-neg", "nlp-card-neg"),
+        "Аралас": ("nlp-badge-mixed", "nlp-card-mixed"),
+        "Бейтарап": ("nlp-badge-neutral", "nlp-card-neutral"),
+        "Анықталмады": ("nlp-badge-neutral", "nlp-card-neutral"),
+    }.get(label, ("nlp-badge-neutral", "nlp-card-neutral"))
 
 
 def analyze(models, text):
@@ -241,7 +241,7 @@ def show_results(result, labels, labels_kk):
     chunk_emotions = [labels_kk[labels[index]] for index in np.argmax(emo, axis=1)]
 
     tone_text = "Аралас" if mixed else polarity_label(overall_pos)
-    tone_cls = _tone_badge_class(tone_text)
+    badge_cls, card_cls = _tone_classes(tone_text)
     marker_pct = max(2.0, min(98.0, overall_pos * 100.0))
 
     if mixed:
@@ -274,11 +274,11 @@ def show_results(result, labels, labels_kk):
 
     st.html(f"""
         <section class="nlp-grid-2" lang="kk">
-            <div class="nlp-card">
+            <div class="nlp-card {card_cls}">
                 <div class="nlp-card-label">Жалпы тональдылық</div>
                 <div class="nlp-card-value-row">
                     <span class="nlp-card-value">{html.escape(tone_text)}</span>
-                    <span class="nlp-badge {tone_cls}">{overall_pos:.0%}</span>
+                    <span class="nlp-badge {badge_cls}">{overall_pos:.0%}</span>
                 </div>
                 <div class="nlp-scale-wrap">
                     <div class="nlp-scale-track">
@@ -291,7 +291,7 @@ def show_results(result, labels, labels_kk):
                     </div>
                 </div>
             </div>
-            <div class="nlp-card">
+            <div class="nlp-card nlp-card-accent">
                 {right_body}
             </div>
         </section>
@@ -379,8 +379,8 @@ def show_emotion_chart(labels, labels_kk, scores):
             axis=alt.Axis(format=".0%", title=None, tickCount=5, ticks=False, domain=False),
         ),
     )
-    bars = base.mark_bar(cornerRadiusEnd=6, height=18).encode(
-        color=alt.condition("datum.leading", alt.value("#0052FF"), alt.value("#CBD5E1")),
+    bars = base.mark_bar(cornerRadiusEnd=7, height=20).encode(
+        color=alt.condition("datum.leading", alt.value("#2563EB"), alt.value("#CBD5E1")),
         tooltip=[
             alt.Tooltip("emotion:N", title="Эмоция"),
             alt.Tooltip("score:Q", title="Баға", format=".1%"),
@@ -390,11 +390,11 @@ def show_emotion_chart(labels, labels_kk, scores):
         align="left", baseline="middle", dx=8, fontSize=12, fontWeight="bold"
     ).encode(
         text=alt.Text("score:Q", format=".1%"),
-        color=alt.condition("datum.leading", alt.value("#0052FF"), alt.value("#475569")),
+        color=alt.condition("datum.leading", alt.value("#2563EB"), alt.value("#475569")),
     )
     chart = (
         (bars + labels_layer)
-        .properties(height=216)
+        .properties(height=224)
         .configure(background="transparent", font="Inter, NLP Sans, sans-serif")
         .configure_view(stroke=None)
         .configure_axis(labelFontSize=12, labelColor="#334155", gridColor="#E2E8F0", gridDash=[3, 3])
@@ -417,14 +417,43 @@ def show_header():
         st.html(f"<style>{css}</style>")
 
     st.html("""
-        <header class="nlp-header" lang="kk">
-            <div class="nlp-kicker">
-                <span class="nlp-kicker-dot"></span>
-                Қазақ тіліндегі мәтіндерді талдау
+        <header class="nlp-hero" lang="kk">
+            <div class="nlp-hero-content">
+                <div class="nlp-hero-badge">
+                    <span class="nlp-hero-dot"></span>
+                    Қазақ тіліндегі мәтіндерді талдау
+                </div>
+                <h1 lang="en">Kazakh NLP Analyzer</h1>
+                <p>Пікірлер мен мәтіндердің тональдылығын, эмоциялық реңкін және негізгі мазмұнын
+                   жылдам анықтауға арналған сервис. Мәтінді енгізіңіз немесе дайын үлгіні таңдаңыз.</p>
+                <div class="nlp-hero-chips">
+                    <span class="nlp-hero-chip"><span class="nlp-chip-dot nlp-dot-sky"></span>Тональдылық</span>
+                    <span class="nlp-hero-chip"><span class="nlp-chip-dot nlp-dot-violet"></span>6 эмоция санаты</span>
+                    <span class="nlp-hero-chip"><span class="nlp-chip-dot nlp-dot-emerald"></span>Тақырып және мазмұн</span>
+                </div>
             </div>
-            <h1 lang="en">Kazakh NLP Analyzer</h1>
-            <p>Пікірлер мен мәтіндердің тональдылығын, эмоциялық реңкін және негізгі мазмұнын
-               жылдам анықтауға арналған сервис. Мәтінді енгізіңіз немесе дайын үлгіні таңдаңыз.</p>
+            <div class="nlp-hero-visual" aria-hidden="true">
+                <div class="nlp-visual-top">
+                    <div class="nlp-visual-dots">
+                        <span style="background:#38bdf8;"></span>
+                        <span style="background:#818cf8;"></span>
+                        <span style="background:#34d399;"></span>
+                    </div>
+                    <span class="nlp-visual-tag">Талдау үлгісі</span>
+                </div>
+                <div class="nlp-visual-row">
+                    <div class="nlp-visual-label"><span>Тональдылық</span><span>Оң</span></div>
+                    <div class="nlp-visual-track"><div class="nlp-visual-fill nlp-fill-1"></div></div>
+                </div>
+                <div class="nlp-visual-row">
+                    <div class="nlp-visual-label"><span>Қуаныш</span><span>Басым</span></div>
+                    <div class="nlp-visual-track"><div class="nlp-visual-fill nlp-fill-2"></div></div>
+                </div>
+                <div class="nlp-visual-row">
+                    <div class="nlp-visual-label"><span>Таңдану</span><span>Орташа</span></div>
+                    <div class="nlp-visual-track"><div class="nlp-visual-fill nlp-fill-3"></div></div>
+                </div>
+            </div>
         </header>
     """)
 
@@ -437,18 +466,21 @@ def show_models_and_details():
             <p class="nlp-models-sub">Әр талдау түріне өзіне бейімделген жеке модель жауап береді.</p>
             <div class="nlp-models-grid">
                 <article class="nlp-model-card">
+                    <div class="nlp-model-num nlp-num-blue">01</div>
                     <div class="nlp-model-role">Тональдылық</div>
                     <div class="nlp-model-name">TF-IDF + логистикалық регрессия</div>
                     <p>Қазақша пікірдің оң, теріс не аралас екенін анықтайды.
                        Ұзын пікірлерді үзінділерге бөліп, әр бөлікті жеке бағалайды.</p>
                 </article>
                 <article class="nlp-model-card">
+                    <div class="nlp-model-num nlp-num-violet">02</div>
                     <div class="nlp-model-role">Эмоциялық реңк</div>
                     <div class="nlp-model-name">E5-small (қосымша үйретілген)</div>
                     <p>Мәтіндегі алты негізгі эмоцияның үлесін бағалап,
                        қай көңіл-күйдің басым екенін көрсетеді.</p>
                 </article>
                 <article class="nlp-model-card">
+                    <div class="nlp-model-num nlp-num-cyan">03</div>
                     <div class="nlp-model-role">Тақырып және мазмұн</div>
                     <div class="nlp-model-name">Google Gemini</div>
                     <p>Қазақ және орыс тіліндегі ұзын мәтіндердің тақырыбын, қысқаша мазмұнын
@@ -508,7 +540,7 @@ def show_models_and_details():
 
 
 def main():
-    st.set_page_config(page_title="Kazakh NLP Analyzer", layout="centered")
+    st.set_page_config(page_title="Kazakh NLP Analyzer", layout="wide")
     show_header()
     review_mode, extended_mode = "Пікірді талдау", "Ұзын мәтін және мазмұн"
     with st.container(key="nlp_workspace"):
@@ -556,7 +588,6 @@ def show_gemini_mode():
             height=210,
             placeholder="Талдауға арналған мәтінді осында енгізіңіз…",
         )
-        st.caption("Мәтін сыртқы AI сервисіне жіберіліп өңделеді.")
         submitted = st.form_submit_button("Талдау", type="primary")
     if not submitted:
         return
@@ -575,27 +606,27 @@ def show_gemini_mode():
 
     tone_labels = {"positive": "Оң", "negative": "Теріс", "neutral": "Бейтарап", "mixed": "Аралас"}
     tone_kk = tone_labels[result.tone]
-    tone_cls = _tone_badge_class(tone_kk)
+    badge_cls, card_cls = _tone_classes(tone_kk)
 
     st.html(f"""
         <section class="nlp-grid-2" lang="kk">
-            <div class="nlp-card">
+            <div class="nlp-card nlp-card-accent">
                 <div class="nlp-card-label">Тақырып</div>
-                <div class="nlp-card-value" style="font-size: 1.12rem; line-height: 1.4;">
+                <div class="nlp-card-value" style="font-size: 1.14rem; line-height: 1.4;">
                     {html.escape(result.topic)}
                 </div>
             </div>
-            <div class="nlp-card">
+            <div class="nlp-card {card_cls}">
                 <div class="nlp-card-label">Жалпы тональдылық</div>
                 <div class="nlp-card-value-row">
                     <span class="nlp-card-value">{html.escape(tone_kk)}</span>
-                    <span class="nlp-badge {tone_cls}">{html.escape(tone_kk)}</span>
+                    <span class="nlp-badge {badge_cls}">{html.escape(tone_kk)}</span>
                 </div>
             </div>
         </section>
         <div class="nlp-card" style="margin-bottom: 1rem;">
             <div class="nlp-card-label">Қысқаша мазмұн</div>
-            <p style="margin: 0; font-size: 0.94rem; line-height: 1.62; color: #334155;">
+            <p style="margin: 0; font-size: 0.95rem; line-height: 1.64; color: #334155;">
                 {html.escape(result.summary)}
             </p>
         </div>
