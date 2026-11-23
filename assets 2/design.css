@@ -1,0 +1,620 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@font-face {
+    font-family: "NLP Sans";
+    src: url("data:font/woff;base64,__SANS__") format("woff");
+    font-weight: 400;
+    font-display: swap;
+}
+@font-face {
+    font-family: "NLP Sans";
+    src: url("data:font/woff;base64,__SANS_BOLD__") format("woff");
+    font-weight: 700;
+    font-display: swap;
+}
+
+:root {
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --surface-muted: #f1f5f9;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --ink: #0f172a;
+    --ink-secondary: #475569;
+    --ink-muted: #64748b;
+    --accent: #0052ff;
+    --accent-hover: #003ecc;
+    --accent-soft: #eff6ff;
+    --pos: #059669;
+    --pos-bg: #ecfdf5;
+    --neg: #e11d48;
+    --neg-bg: #fff1f2;
+    --mixed: #d97706;
+    --mixed-bg: #fffbeb;
+    --neutral: #475569;
+    --neutral-bg: #f1f5f9;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "Inter", "NLP Sans", system-ui, -apple-system, sans-serif;
+}
+
+.stApp {
+    background-color: var(--bg);
+    background-image: radial-gradient(#cbd5e1 0.85px, transparent 0.85px);
+    background-size: 24px 24px;
+    color: var(--ink);
+}
+
+.stApp,
+.stApp button,
+.stApp input,
+.stApp textarea,
+.stApp select {
+    font-family: var(--sans);
+}
+
+[data-testid="stHeader"] {
+    background: rgba(248, 250, 252, 0.86);
+    backdrop-filter: blur(8px);
+}
+
+[data-testid="stMainBlockContainer"] {
+    max-width: 960px;
+    padding: 3.5rem clamp(1rem, 3vw, 2rem) 4.5rem;
+}
+
+/* 1. Шапка: чистая и понятная для пользователя */
+.nlp-header {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: clamp(1.35rem, 2.8vw, 2rem) clamp(1.35rem, 3vw, 2.2rem);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.nlp-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid #bfdbfe;
+    border-radius: 999px;
+    padding: 0.24rem 0.65rem;
+    margin-bottom: 0.75rem;
+}
+
+.nlp-kicker-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--accent);
+}
+
+.nlp-header h1 {
+    font-family: var(--sans);
+    font-size: clamp(1.8rem, 3.4vw, 2.4rem);
+    font-weight: 700;
+    line-height: 1.12;
+    letter-spacing: -0.035em;
+    color: var(--ink);
+    margin: 0 0 0.55rem;
+    padding: 0;
+}
+
+.nlp-header p {
+    margin: 0;
+    max-width: 64ch;
+    color: var(--ink-secondary);
+    font-size: 0.98rem;
+    line-height: 1.58;
+}
+
+/* 2. Рабочая область */
+.st-key-nlp_workspace {
+    margin-top: 1.15rem;
+}
+
+/* Переключатель режимов */
+.st-key-nlp_workspace [role="radiogroup"] {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    padding: 0.28rem;
+    background: var(--surface-muted);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 0.35rem;
+}
+
+.st-key-nlp_workspace [role="radiogroup"] > label {
+    padding: 0.45rem 0.95rem;
+    border-radius: 9px;
+    border: 1px solid transparent;
+    margin: 0;
+    background: transparent;
+    color: var(--ink-secondary);
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+.st-key-nlp_workspace [role="radiogroup"] > label:hover {
+    color: var(--ink);
+}
+
+.st-key-nlp_workspace [role="radiogroup"] > label:has(input:checked) {
+    background: var(--surface);
+    border-color: var(--border);
+    color: var(--ink);
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+/* Быстрые примеры */
+.nlp-preset-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink-muted);
+    margin: 0.6rem 0 0.4rem;
+}
+
+.st-key-nlp_presets button {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--ink-secondary);
+    border-radius: 9px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    padding: 0.38rem 0.65rem;
+    min-height: 2.15rem;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.st-key-nlp_presets button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-soft);
+}
+
+/* Форма ввода */
+.st-key-nlp_workspace [data-testid="stForm"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.2rem 1.25rem;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.st-key-nlp_workspace [data-testid="stForm"] textarea {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--ink);
+    font-size: 0.95rem;
+    line-height: 1.62;
+}
+
+.st-key-nlp_workspace [data-testid="stForm"] textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0, 82, 255, 0.12);
+    background: var(--surface);
+}
+
+.st-key-nlp_workspace [data-testid="stFormSubmitButton"] button[kind="primaryFormSubmit"] {
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    color: #ffffff;
+    border-radius: 10px;
+    font-weight: 600;
+    padding: 0.52rem 1.45rem;
+    transition: background 0.15s ease;
+}
+
+.st-key-nlp_workspace [data-testid="stFormSubmitButton"] button[kind="primaryFormSubmit"]:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+
+/* Карточки результатов */
+.nlp-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.9rem;
+    margin: 1.05rem 0;
+}
+
+.nlp-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.15rem 1.25rem;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.nlp-card-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--ink-muted);
+    margin-bottom: 0.5rem;
+}
+
+.nlp-card-value-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.nlp-card-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    color: var(--ink);
+    line-height: 1.15;
+}
+
+.nlp-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.24rem 0.65rem;
+    border-radius: 999px;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+}
+
+.nlp-badge-pos { background: var(--pos-bg); color: var(--pos); border-color: #a7f3d0; }
+.nlp-badge-neg { background: var(--neg-bg); color: var(--neg); border-color: #fecdd3; }
+.nlp-badge-mixed { background: var(--mixed-bg); color: var(--mixed); border-color: #fde68a; }
+.nlp-badge-neutral { background: var(--neutral-bg); color: var(--neutral); border-color: var(--border-strong); }
+
+.nlp-score {
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid #bfdbfe;
+    padding: 0.14rem 0.5rem;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+/* Шкала полярности */
+.nlp-scale-wrap {
+    margin-top: 0.9rem;
+}
+
+.nlp-scale-track {
+    position: relative;
+    height: 9px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #fda4af 0%, #fecdd3 56%, #e2e8f0 56%, #e2e8f0 76%, #6ee7b7 76%, #10b981 100%);
+    border: 1px solid var(--border);
+}
+
+.nlp-scale-marker {
+    position: absolute;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    background: var(--accent);
+    border: 2.5px solid #ffffff;
+    box-shadow: 0 0 0 1.5px var(--accent);
+    transform: translate(-50%, -50%);
+}
+
+.nlp-scale-ticks {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.4rem;
+    font-size: 0.73rem;
+    color: var(--ink-muted);
+}
+
+.nlp-mixed-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.48rem;
+    margin-top: 0.35rem;
+}
+
+.nlp-mixed-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.48rem 0.68rem;
+    border-radius: 9px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    font-size: 0.85rem;
+}
+
+.nlp-mixed-item strong {
+    color: var(--ink);
+}
+
+.nlp-subnote {
+    margin-top: 0.6rem;
+    font-size: 0.82rem;
+    color: var(--ink-muted);
+    line-height: 1.48;
+}
+
+/* Заголовки секций */
+.nlp-section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin: 1.25rem 0 0.55rem;
+}
+
+.nlp-section-head h3 {
+    margin: 0;
+    font-size: 1.02rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+}
+
+.nlp-section-head span {
+    font-size: 0.8rem;
+    color: var(--ink-muted);
+}
+
+/* Крайние фрагменты */
+.nlp-excerpt-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem;
+}
+
+.nlp-excerpt {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+}
+
+.nlp-excerpt-neg { border-left-color: var(--neg); }
+.nlp-excerpt-pos { border-left-color: var(--pos); }
+
+.nlp-excerpt-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.45rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.nlp-excerpt p {
+    margin: 0;
+    font-size: 0.86rem;
+    line-height: 1.55;
+    color: var(--ink-secondary);
+}
+
+/* Карточки цитат в расширенном режиме */
+.nlp-quote-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    margin: 0.5rem 0 0.85rem;
+}
+
+.nlp-quote-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+}
+
+.nlp-quote-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+}
+
+.nlp-quote-emotion {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--ink);
+}
+
+.nlp-quote-verified {
+    font-size: 0.74rem;
+    font-weight: 500;
+    color: var(--pos);
+    background: var(--pos-bg);
+    border: 1px solid #a7f3d0;
+    padding: 0.12rem 0.55rem;
+    border-radius: 999px;
+}
+
+.nlp-quote-text {
+    margin: 0;
+    font-size: 0.89rem;
+    color: var(--ink-secondary);
+    line-height: 1.52;
+}
+
+/* 3. Блок «Қандай модельдер қолданылады» под рабочей зоной */
+.nlp-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 2rem 0 1.5rem;
+}
+
+.nlp-models-section h2 {
+    font-family: var(--sans);
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin: 0 0 0.3rem;
+    padding: 0;
+}
+
+.nlp-models-sub {
+    margin: 0 0 1rem;
+    font-size: 0.88rem;
+    color: var(--ink-muted);
+}
+
+.nlp-models-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.9rem;
+    margin-bottom: 1.15rem;
+}
+
+.nlp-model-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.1rem 1.15rem;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.nlp-model-role {
+    font-size: 0.73rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    margin-bottom: 0.35rem;
+}
+
+.nlp-model-name {
+    font-size: 0.98rem;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 0.45rem;
+}
+
+.nlp-model-card p {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    color: var(--ink-secondary);
+}
+
+/* 4. Подробное описание и метрики (внутри нижнего expander) */
+.nlp-pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.7rem 0.85rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin-bottom: 1rem;
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    color: var(--ink-secondary);
+}
+
+.nlp-pipeline span.step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--ink);
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+.nlp-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem;
+}
+
+.nlp-detail-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.95rem 1.05rem;
+}
+
+.nlp-detail-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.45rem;
+}
+
+.nlp-detail-head strong {
+    font-size: 0.88rem;
+    color: var(--ink);
+}
+
+.nlp-detail-box p {
+    margin: 0;
+    font-size: 0.83rem;
+    line-height: 1.55;
+    color: var(--ink-secondary);
+}
+
+.nlp-mono {
+    font-family: var(--mono);
+    font-size: 0.79rem;
+    color: var(--ink);
+}
+
+.nlp-detail-note {
+    margin-top: 0.85rem;
+    padding: 0.75rem 0.95rem;
+    background: var(--surface-muted);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.8rem;
+    line-height: 1.52;
+    color: var(--ink-secondary);
+}
+
+/* Общие стили expander и таблиц */
+[data-testid="stExpander"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+@media (max-width: 768px) {
+    [data-testid="stMainBlockContainer"] {
+        padding-top: 3rem;
+    }
+    .nlp-grid-2,
+    .nlp-excerpt-grid,
+    .nlp-models-grid,
+    .nlp-detail-grid {
+        grid-template-columns: 1fr;
+    }
+    .nlp-header {
+        padding: 1.15rem;
+    }
+}
