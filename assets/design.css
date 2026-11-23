@@ -901,3 +901,115 @@
         grid-template-columns: 1fr;
     }
 }
+
+
+/* Дополнительные стили расширенного анализа Gemini */
+.nlp-pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.7rem;
+}
+
+.nlp-lang-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.16rem 0.56rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid #bfdbfe;
+}
+
+.nlp-kw-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.16rem 0.54rem;
+    border-radius: 8px;
+    font-size: 0.74rem;
+    font-weight: 500;
+    color: var(--ink-secondary);
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+}
+
+.nlp-sarcasm-banner {
+    margin-top: 0.75rem;
+    padding: 0.62rem 0.82rem;
+    border-radius: 10px;
+    background: var(--mixed-bg);
+    border: 1px solid #fde68a;
+    color: #92400e;
+    font-size: 0.82rem;
+    line-height: 1.48;
+}
+
+.nlp-sarcasm-banner strong {
+    display: block;
+    font-size: 0.8rem;
+    margin-bottom: 0.18rem;
+    color: #78350f;
+}
+
+.nlp-points-list {
+    margin: 0.35rem 0 0;
+    padding-left: 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.38rem;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: var(--ink-secondary);
+}
+
+.nlp-points-empty {
+    margin: 0.35rem 0 0;
+    font-size: 0.84rem;
+    color: var(--ink-muted);
+}
+
+.nlp-quote-badges {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.nlp-quote-cat {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid #bfdbfe;
+    padding: 0.13rem 0.52rem;
+    border-radius: 999px;
+}
+
+.nlp-quote-reason {
+    margin: 0.45rem 0 0;
+    font-size: 0.81rem;
+    color: var(--ink-muted);
+    line-height: 1.46;
+}
+
+.st-key-nlp_gemini_presets button {
+    background: var(--surface) !important;
+    border: 1px solid var(--border) !important;
+    color: var(--ink-secondary) !important;
+    border-radius: 10px !important;
+    font-size: 0.83rem !important;
+    font-weight: 500 !important;
+    padding: 0.42rem 0.72rem !important;
+    min-height: 2.3rem !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+    transition: all 0.15s ease !important;
+}
+
+.st-key-nlp_gemini_presets button:hover {
+    border-color: var(--accent) !important;
+    color: var(--accent) !important;
+    background: var(--accent-soft) !important;
+    transform: translateY(-1px);
+}
