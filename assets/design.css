@@ -156,7 +156,7 @@
 .nlp-dot-violet { background: #a78bfa; }
 .nlp-dot-emerald { background: #34d399; }
 
-/* Декоративная glass-панель справа в шапке */
+/* Мини-превью «Талдау үлгісі» в шапке */
 .nlp-hero-visual {
     background: rgba(255, 255, 255, 0.07);
     border: 1px solid rgba(255, 255, 255, 0.16);
@@ -393,6 +393,19 @@
     line-height: 1.15;
 }
 
+.nlp-score-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.nlp-score-caption {
+    font-size: 0.74rem;
+    font-weight: 500;
+    color: var(--ink-muted);
+}
+
 .nlp-badge {
     display: inline-flex;
     align-items: center;
@@ -495,6 +508,12 @@
     margin: 1.35rem 0 0.6rem;
 }
 
+.nlp-section-head-stack {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.22rem;
+}
+
 .nlp-section-head h3 {
     margin: 0;
     font-size: 1.06rem;
@@ -506,6 +525,13 @@
 .nlp-section-head span {
     font-size: 0.8rem;
     color: var(--ink-muted);
+}
+
+.nlp-section-note {
+    margin: 0;
+    font-size: 0.84rem;
+    color: var(--ink-muted);
+    line-height: 1.45;
 }
 
 /* Крайние фрагменты */
@@ -544,7 +570,7 @@
     color: var(--ink-secondary);
 }
 
-/* Цитаты расширенного режима */
+/* Цитаты режима Gemini */
 .nlp-quote-list {
     display: flex;
     flex-direction: column;
@@ -575,12 +601,12 @@
     color: var(--ink);
 }
 
-.nlp-quote-verified {
+.nlp-quote-source {
     font-size: 0.74rem;
-    font-weight: 600;
-    color: var(--pos);
-    background: var(--pos-bg);
-    border: 1px solid #a7f3d0;
+    font-weight: 500;
+    color: var(--neutral);
+    background: var(--neutral-bg);
+    border: 1px solid var(--border);
     padding: 0.14rem 0.6rem;
     border-radius: 999px;
 }
@@ -676,29 +702,92 @@
     color: var(--ink-secondary);
 }
 
-/* 4. Нижний блок с подробными метриками */
-.nlp-pipeline {
+/* 4. Схема двух веток и карточки исследования в нижнем expander */
+.nlp-schema {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1.05rem;
+}
+
+.nlp-branch {
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    padding: 0.85rem 1rem;
+}
+
+.nlp-branch-title {
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    margin-bottom: 0.55rem;
+}
+
+.nlp-flow {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.75rem 0.9rem;
-    background: var(--surface-soft);
-    border: 1px solid var(--border);
-    border-radius: 11px;
-    margin-bottom: 1rem;
-    font-family: var(--mono);
-    font-size: 0.76rem;
+    gap: 0.42rem;
+    font-size: 0.8rem;
     color: var(--ink-secondary);
 }
 
-.nlp-pipeline span.step {
+.nlp-flow .step {
     background: var(--surface);
     border: 1px solid var(--border);
     color: var(--ink);
-    padding: 0.2rem 0.55rem;
-    border-radius: 7px;
+    padding: 0.3rem 0.62rem;
+    border-radius: 8px;
+    font-weight: 500;
+    line-height: 1.35;
+}
+
+.nlp-flow .step-blue {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1e40af;
     font-weight: 600;
+}
+
+.nlp-flow .step-violet {
+    background: #f5f3ff;
+    border-color: #ddd6fe;
+    color: #5b21b6;
+    font-weight: 600;
+}
+
+.nlp-flow .step-cyan {
+    background: #ecfeff;
+    border-color: #a5f3fc;
+    color: #155e75;
+    font-weight: 600;
+}
+
+.nlp-flow .step-result {
+    background: var(--surface);
+    border-color: var(--border-strong);
+    font-weight: 600;
+}
+
+.nlp-flow .arrow {
+    color: var(--ink-muted);
+    font-family: var(--mono);
+    font-weight: 600;
+}
+
+.nlp-parallel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.32rem;
+    padding: 0.38rem 0.48rem;
+    background: var(--surface);
+    border: 1px dashed var(--border-strong);
+    border-left: 2.5px solid var(--accent);
+    border-right: 2.5px solid var(--accent);
+    border-radius: 10px;
 }
 
 .nlp-detail-grid {
@@ -719,7 +808,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
-    margin-bottom: 0.45rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.5rem;
 }
 
 .nlp-detail-head strong {
@@ -734,21 +824,50 @@
     color: var(--ink-secondary);
 }
 
+.nlp-detail-box p + p {
+    margin-top: 0.5rem;
+}
+
+.nlp-detail-sub {
+    color: var(--ink-muted) !important;
+    font-size: 0.81rem !important;
+}
+
 .nlp-mono {
     font-family: var(--mono);
     font-size: 0.8rem;
     color: var(--ink);
 }
 
-.nlp-detail-note {
-    margin-top: 0.9rem;
-    padding: 0.8rem 1rem;
+/* Три коротких пункта «Шектер мен ережелер» */
+.nlp-rules-box {
+    margin-top: 0.95rem;
+    padding: 0.95rem 1.1rem;
     background: var(--surface-muted);
     border: 1px solid var(--border);
-    border-radius: 11px;
-    font-size: 0.81rem;
-    line-height: 1.54;
+    border-radius: 12px;
+}
+
+.nlp-rules-title {
+    font-size: 0.84rem;
+    font-weight: 700;
+    color: var(--ink);
+    margin-bottom: 0.5rem;
+}
+
+.nlp-rules-list {
+    margin: 0;
+    padding-left: 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.42rem;
+    font-size: 0.82rem;
+    line-height: 1.55;
     color: var(--ink-secondary);
+}
+
+.nlp-rules-list li strong {
+    color: var(--ink);
 }
 
 [data-testid="stExpander"] {
