@@ -182,7 +182,7 @@ def polarity_label(p_pos):
         return "Оң"
     if p_pos <= NEG_THRESHOLD:
         return "Теріс"
-    return "Бейтарап"
+    return "Анықталмады"
 
 
 def analyze(models, text):
@@ -203,19 +203,22 @@ def show_results(result, labels, labels_kk):
     chunks, weights, p_pos, emo = result["chunks"], result["weights"], result["p_pos"], result["emo"]
     overall_pos = float(weighted_mean(p_pos, weights))
     overall_emo = weighted_mean(emo, weights)
-    order = np.argsort(-overall_emo)
+    most_neg, most_pos = int(np.argmin(p_pos)), int(np.argmax(p_pos))
+    mixed = p_pos[most_neg] <= NEG_THRESHOLD and p_pos[most_pos] >= POS_THRESHOLD
+    chunk_emotions = [labels_kk[labels[index]] for index in np.argmax(emo, axis=1)]
 
     left, right = st.columns(2)
-    left.metric("Тональдылық", polarity_label(overall_pos))
-    left.caption(f"P(оң) = {overall_pos:.2f}")
-    right.metric("Эмоция", labels_kk[labels[order[0]]])
-    right.caption(f"2-ші: {labels_kk[labels[order[1]]]} ({overall_emo[order[1]]:.0%})")
+    left.metric("Тональдылық", "Аралас" if mixed else polarity_label(overall_pos))
+    left.caption(f"Орташа P(оң) = {overall_pos:.2f}")
+    if mixed:
+        right.write("**Үзінділердегі эмоция белгілері**")
+        right.write(f"Теріс үзінді №{most_neg + 1} · {chunk_emotions[most_neg]}")
+        right.write(f"Оң үзінді №{most_pos + 1} · {chunk_emotions[most_pos]}")
+    else:
+        right.metric("Эмоцияның басым белгісі", labels_kk[labels[int(np.argmax(overall_emo))]])
 
-    if len(chunks) > 1 and (p_pos <= NEG_THRESHOLD).any() and (p_pos >= POS_THRESHOLD).any():
-        st.info("Мәтінде айқын оң да, айқын теріс те үзінділер бар: пікір аралас.")
-
-    st.write("**Бүкіл мәтін бойынша эмоциялардың таралуы**")
-    st.bar_chart(pd.DataFrame({"Ықтималдық": overall_emo}, index=[labels_kk[l] for l in labels]))
+    st.write("**Бүкіл мәтін бойынша эмоция моделінің бағалары**")
+    st.bar_chart(pd.DataFrame({"Орташа баға": overall_emo}, index=[labels_kk[l] for l in labels]))
 
     if len(chunks) > 1:
         st.write(f"**Үзінділер бойынша талдау** · {len(chunks)}")
@@ -227,11 +230,10 @@ def show_results(result, labels, labels_kk):
                 "Үзінді": chunk[:90] + ("…" if len(chunk) > 90 else ""),
                 "Тональдылық": polarity_label(float(p_pos[i])),
                 "P(оң)": round(float(p_pos[i]), 2),
-                "Эмоция": labels_kk[labels[top]],
-                "Сенімділік": round(float(emo[i][top]), 2),
+                "Эмоция": chunk_emotions[i],
+                "Модель бағасы": round(float(emo[i][top]), 2),
             })
         st.dataframe(pd.DataFrame(rows), hide_index=True)
-        most_neg, most_pos = int(np.argmin(p_pos)), int(np.argmax(p_pos))
         neg_title = ("Ең теріс" if p_pos[most_neg] <= NEG_THRESHOLD
                      else "Ең аз оң (айқын теріс үзінділер жоқ)")
         pos_title = ("Ең оң" if p_pos[most_pos] >= POS_THRESHOLD
@@ -240,9 +242,9 @@ def show_results(result, labels, labels_kk):
             st.markdown(f"**{neg_title} (№{most_neg + 1}, P(оң) = {p_pos[most_neg]:.2f}):** {chunks[most_neg]}")
             st.markdown(f"**{pos_title} (№{most_pos + 1}, P(оң) = {p_pos[most_pos]:.2f}):** {chunks[most_pos]}")
 
-    st.caption("Тональдылықтағы «Бейтарап» белгісі модельдің сенімсіз екенін білдіреді: "
-               f"негізгі шек {POLARITY_THRESHOLD} валидацияда таңдалған, ±{NEUTRAL_HALF_WIDTH} аймағы эвристика, "
-               "бұл бөлек үйретілген класс емес. "
+    st.caption("Тональдылық «Анықталмады» деп көрсетілсе, модель бағасы белгісіздік аймағында. "
+               f"Негізгі шек {POLARITY_THRESHOLD} валидацияда таңдалған, "
+               f"ал ±{NEUTRAL_HALF_WIDTH} аймағы эвристикалық ережемен берілген. "
                "Эмоция моделі шағын жиында үйретілген және 60 мәтіндік пилотта бағаланған.")
 
 
