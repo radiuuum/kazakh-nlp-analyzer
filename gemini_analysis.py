@@ -15,9 +15,20 @@ from pydantic import BaseModel, Field, ValidationError
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
+# Резервные текстовые модели с доступными лимитами в Google AI Studio.
+# При HTTP 503/429/404/5xx клиент автоматически переходит к следующей модели.
+FALLBACK_MODELS = (
+    "gemini-3.1-flash-lite",
+    "gemini-3.1-flash-lite-preview",
+    "gemini-4-hydrogen",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+)
+
 MAX_TEXT_CHARS = 20_000
-MAX_RETRIES = 3
+PRIMARY_RETRIES = 2
 RETRYABLE_HTTP_CODES = {429, 500, 502, 503, 504}
+FALLBACK_TRIGGER_CODES = {404, 429, 500, 502, 503, 504}
 
 BaseEmotionCategory = Literal[
     "joy",
@@ -204,10 +215,18 @@ def _friendly_api_error(code: int | None) -> str:
         429: "Сұрау лимитіне жетті (HTTP 429). Бірнеше секунд күтіп, қайта көріңіз.",
         500: "Сыртқы AI серверінде уақытша ішкі қате болды (HTTP 500). Қайталап көріңіз.",
         502: "Сыртқы AI серверімен байланыс үзілді (HTTP 502). Қайталап көріңіз.",
-        503: "Google AI сервері қазір уақытша жүктелген (HTTP 503). Жүйе 3 рет қайталап көрді — 10–20 секундтан соң қайта басып көріңіз.",
+        503: "Google AI серверлері қазір уақытша жүктелген (HTTP 503). Негізгі және қосалқы модельдер тексерілді — 15–20 секундтан соң қайта көріңіз.",
         504: "Сыртқы AI сервері жауап беруге үлгермеді (HTTP 504). Қайталап көріңіз.",
     }
     return messages.get(code, f"Сыртқы AI қызметі сұрауды өңдей алмады (HTTP {code}).")
+
+
+def _build_model_chain(primary_model: str) -> list[str]:
+    chain: list[str] = []
+    for name in (primary_model.strip(), *FALLBACK_MODELS):
+        if name and name not in chain:
+            chain.append(name)
+    return chain
 
 
 def analyze_with_gemini(text: str, api_key: str, model: str = DEFAULT_MODEL) -> TextAnalysis:
@@ -217,9 +236,11 @@ def analyze_with_gemini(text: str, api_key: str, model: str = DEFAULT_MODEL) -> 
     if not api_key.strip():
         raise ValueError("GEMINI_API_KEY көрсетілмеген.")
 
+    model_chain = _build_model_chain(model or DEFAULT_MODEL)
     response = None
+    used_model = model_chain[0]
     last_code: int | None = None
-    last_detail = ""
+    attempt_logs: list[str] = []
 
     with genai.Client(
         api_key=api_key,
@@ -228,64 +249,85 @@ def analyze_with_gemini(text: str, api_key: str, model: str = DEFAULT_MODEL) -> 
             retry_options=types.HttpRetryOptions(attempts=1),
         ),
     ) as client:
-        for attempt in range(1, MAX_RETRIES + 1):
-            try:
-                response = client.models.generate_content(
-                    model=model,
-                    contents=text,
-                    config=types.GenerateContentConfig(
-                        system_instruction=SYSTEM_INSTRUCTION,
-                        response_mime_type="application/json",
-                        response_schema=TextAnalysis,
-                        temperature=0.1,
-                        max_output_tokens=2500,
-                    ),
-                )
+        for model_idx, candidate_model in enumerate(model_chain):
+            max_attempts = PRIMARY_RETRIES if model_idx == 0 else 1
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    response = client.models.generate_content(
+                        model=candidate_model,
+                        contents=text,
+                        config=types.GenerateContentConfig(
+                            system_instruction=SYSTEM_INSTRUCTION,
+                            response_mime_type="application/json",
+                            response_schema=TextAnalysis,
+                            temperature=0.1,
+                            max_output_tokens=4096,
+                        ),
+                    )
+                    used_model = candidate_model
+                    if model_idx > 0:
+                        logger.info("Gemini fallback succeeded with model=%s", candidate_model)
+                    break
+                except errors.APIError as exc:
+                    code = getattr(exc, "code", None)
+                    msg = getattr(exc, "message", str(exc))
+                    entry = f"model={candidate_model} | attempt={attempt}/{max_attempts} | HTTP {code}: {msg}"
+                    attempt_logs.append(entry)
+                    logger.warning("Gemini APIError: %s", entry)
+
+                    # Ключ/права/некорректный запрос не исправятся сменой модели.
+                    if code in {400, 401, 403}:
+                        raise GeminiAnalysisError(
+                            _friendly_api_error(code),
+                            status_code=code,
+                            detail="\n".join(attempt_logs),
+                        ) from None
+
+                    # Если не 404 (например, 503/429), запоминаем как основной код ошибки.
+                    if code != 404 or last_code is None:
+                        last_code = code
+
+                    if code in RETRYABLE_HTTP_CODES and attempt < max_attempts:
+                        time.sleep(1.0 * attempt)
+                        continue
+                    if code in FALLBACK_TRIGGER_CODES:
+                        break
+                    raise GeminiAnalysisError(
+                        _friendly_api_error(code),
+                        status_code=code,
+                        detail="\n".join(attempt_logs),
+                    ) from None
+                except RequestError as exc:
+                    entry = f"model={candidate_model} | attempt={attempt}/{max_attempts} | network error: {type(exc).__name__}"
+                    attempt_logs.append(entry)
+                    logger.warning("Gemini RequestError: %s", entry)
+                    if attempt < max_attempts:
+                        time.sleep(1.0 * attempt)
+                        continue
+                    break
+            if response is not None:
                 break
-            except errors.APIError as exc:
-                code = getattr(exc, "code", None)
-                last_code = code
-                last_detail = f"model={model} | attempt={attempt}/{MAX_RETRIES} | HTTP {code}: {getattr(exc, 'message', str(exc))}"
-                logger.warning("Gemini APIError: %s", last_detail)
-                if code in RETRYABLE_HTTP_CODES and attempt < MAX_RETRIES:
-                    time.sleep(1.4 * attempt)
-                    continue
-                raise GeminiAnalysisError(
-                    _friendly_api_error(code),
-                    status_code=code,
-                    detail=last_detail,
-                ) from None
-            except RequestError as exc:
-                last_detail = f"model={model} | attempt={attempt}/{MAX_RETRIES} | network error: {type(exc).__name__}"
-                logger.warning("Gemini RequestError: %s", last_detail)
-                if attempt < MAX_RETRIES:
-                    time.sleep(1.4 * attempt)
-                    continue
-                raise GeminiAnalysisError(
-                    "Сыртқы AI қызметіне қосылу мүмкін болмады. Интернет байланысын тексеріп, қайта көріңіз.",
-                    detail=last_detail,
-                ) from None
 
     if response is None or not response.text:
         raise GeminiAnalysisError(
-            "Сыртқы AI қызметі мәтіндік жауап қайтармады.",
+            _friendly_api_error(last_code) if last_code else "Сыртқы AI қызметіне қосылу мүмкін болмады. Қайталап көріңіз.",
             status_code=last_code,
-            detail=last_detail or f"model={model} | empty response.text",
+            detail="\n".join(attempt_logs) or f"model={used_model} | empty response.text",
         )
 
     try:
         result = TextAnalysis.model_validate_json(response.text)
     except ValidationError as exc:
-        logger.warning("Gemini JSON validation failed: %s", exc)
+        logger.warning("Gemini JSON validation failed (model=%s): %s", used_model, exc)
         raise GeminiAnalysisError(
             "Жауап пішімі күтілген құрылымға сәйкес келмеді. Қайталап көріңіз.",
-            detail=f"model={model} | ValidationError",
+            detail=f"model={used_model} | ValidationError",
         ) from None
 
     if not result.topic.strip() or not result.summary.strip():
         raise GeminiAnalysisError(
             "Мәтіннің тақырыбы немесе қысқаша мазмұны анықталмады.",
-            detail=f"model={model} | empty topic/summary",
+            detail=f"model={used_model} | empty topic/summary",
         )
 
     result.topic = re.sub(r"\s+", " ", result.topic).strip()
