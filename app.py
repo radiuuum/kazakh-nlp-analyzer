@@ -1,5 +1,6 @@
 """Kazakh NLP Analyzer: тональность (TF-IDF + LogReg) и эмоции (дообученная E5-small)."""
 
+import base64
 import hashlib
 import json
 import logging
@@ -248,10 +249,45 @@ def show_results(result, labels, labels_kk):
                "Эмоция моделі шағын жиында үйретілген және 60 мәтіндік пилотта бағаланған.")
 
 
+def show_header():
+    description = "Қазақ тіліндегі пікірлердің тональдылығы мен эмоциялық реңкін анықтауға арналған оқу жобасы."
+    artwork = Path(__file__).parent / "assets" / "review-hero.webp"
+    if not artwork.is_file():
+        st.title("Kazakh NLP Analyzer")
+        st.write(description)
+        return
+
+    encoded = base64.b64encode(artwork.read_bytes()).decode("ascii")
+    st.html(f"""
+        <style>
+        .nlp-cover {{
+            display: grid; grid-template-columns: 1.12fr 1fr;
+            background: #103a33; color: #fff7e6; border-radius: 18px;
+            overflow: hidden; margin-bottom: .65rem;
+        }}
+        .nlp-copy {{ padding: clamp(20px, 4vw, 40px); align-self: center; }}
+        .nlp-cover h1 {{
+            font: 600 clamp(32px, 4.5vw, 52px)/1.02 Georgia, serif;
+            letter-spacing: -.045em; color: inherit; margin: 0 0 .7rem; padding: 0;
+        }}
+        .nlp-cover p {{ font-size: .97rem; line-height: 1.5; color: #e4eade; margin: 0; }}
+        .nlp-cover img {{ width: 100%; height: 100%; min-height: 190px; object-fit: cover; }}
+        @media (max-width: 580px) {{
+            .nlp-cover {{ grid-template-columns: 1fr; }}
+            .nlp-cover img {{ height: 105px; min-height: 0; object-position: center 55%; }}
+        }}
+        </style>
+        <header class="nlp-cover">
+            <div class="nlp-copy"><h1>Kazakh NLP Analyzer</h1><p>{description}</p></div>
+            <img alt="" src="data:image/webp;base64,{encoded}">
+        </header>
+    """)
+
+
 def main():
     st.set_page_config(page_title="Kazakh NLP Analyzer", layout="centered")
-    st.title("Kazakh NLP Analyzer")
-    review_mode, gemini_mode = "Қазақша пікірді талдау", "Мәтінді кеңейтілген талдау"
+    show_header()
+    review_mode, gemini_mode = "Пікірді талдау", "Gemini арқылы талдау"
     mode = st.radio("Талдау түрі", (review_mode, gemini_mode), horizontal=True)
     if mode == gemini_mode:
         show_gemini_mode()
@@ -260,6 +296,7 @@ def main():
 
 
 def show_gemini_mode():
+    st.caption("Gemini мәтіннің тақырыбын, тональдылығы мен эмоцияларын анықтап, қысқаша мазмұнын береді.")
     try:
         from gemini_analysis import (
             DEFAULT_MODEL, MAX_TEXT_CHARS, GeminiAnalysisError, analyze_with_gemini,
@@ -281,6 +318,7 @@ def show_gemini_mode():
     with st.form("gemini_analysis"):
         raw_text = st.text_area(
             "Қазақша немесе орысша мәтін", max_chars=MAX_TEXT_CHARS, height=220,
+            placeholder="Талдауға арналған мәтінді осында енгізіңіз…",
         )
         st.caption("Талдау батырмасын басқанда мәтін Google Gemini API қызметіне жіберіледі.")
         submitted = st.form_submit_button("Gemini арқылы талдау", type="primary")
@@ -315,8 +353,6 @@ def show_gemini_mode():
 
 
 def show_review_mode():
-    st.caption("Қазақ тіліндегі пікірлердің тональдылығы мен эмоциясын талдау")
-
     revision = "main"
     try:
         repo_id = st.secrets.get("SENTIMENT_REPO_ID", "")
@@ -353,10 +389,11 @@ def show_review_mode():
         "Ұзын мәтін (коммуналдық төлем)": LONG_STORY,
     }
 
-    example = st.selectbox("Тексеруге арналған мысал", presets)
+    with st.expander("Пікір үлгілері"):
+        example = st.selectbox("Үлгі", list(presets), index=None, placeholder="Үлгіні таңдаңыз")
     with st.form("analysis"):
-        raw_text = st.text_area("Қазақша мәтін", value=presets[example], key=example,
-                                max_chars=MAX_CHARS, height=180)
+        raw_text = st.text_area("Қазақша пікір", value=presets.get(example, ""), key=f"review_{example}",
+                                max_chars=MAX_CHARS, height=180, placeholder="Пікір мәтінін енгізіңіз…")
         submitted = st.form_submit_button("Талдау", type="primary")
     if not submitted:
         return
@@ -383,6 +420,7 @@ def show_review_mode():
 
     peak_mib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
     with st.expander("Техникалық ақпарат"):
+        st.write("Тональдылық моделі — TF-IDF және логистикалық регрессия. Эмоция моделі — E5.")
         st.write(f"**Таңбалар** · {len(raw_text)}  **Токендер** · {sum(result['weights'])}  "
                  f"**Үзінділер** · {len(result['chunks'])}")
         st.write(f"**Бір үзіндідегі максимум** · {result['max_chunk_tokens']}/{info['max_length']} токен")
