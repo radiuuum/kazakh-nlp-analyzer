@@ -6,6 +6,7 @@ import logging
 import re
 import resource
 import unicodedata
+from importlib.metadata import version
 from pathlib import Path
 from time import perf_counter
 
@@ -14,9 +15,6 @@ import numpy as np
 import pandas as pd
 import sklearn
 import streamlit as st
-import torch
-from huggingface_hub import hf_hub_download
-from safetensors.torch import load_file
 from streamlit.errors import StreamlitSecretNotFoundError
 
 # Тональность: файлы лежат в репозитории из секрета SENTIMENT_REPO_ID.
@@ -70,6 +68,10 @@ def clean_text(text):
 
 @st.cache_resource(show_spinner=False)
 def load_models(repo_id, revision):
+    import torch
+    from huggingface_hub import hf_hub_download
+    from safetensors.torch import load_file
+
     # E5-small использует архитектуру BERT и токенизатор XLM-R.
     from transformers.models.bert.modeling_bert import BertModel
     from transformers.models.xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
@@ -150,6 +152,8 @@ def predict_polarity(model, chunks):
 
 
 def predict_emotions(models, chunks):
+    import torch
+
     info, tokenizer, encoder, head = (models["emo_info"], models["tokenizer"],
                                       models["encoder"], models["head"])
     probs = []
@@ -245,6 +249,70 @@ def show_results(result, labels, labels_kk):
 def main():
     st.set_page_config(page_title="Kazakh NLP Analyzer", layout="centered")
     st.title("Kazakh NLP Analyzer")
+    review_mode, gemini_mode = "Қазақша пікірді талдау", "Мәтінді кеңейтілген талдау"
+    mode = st.radio("Талдау түрі", (review_mode, gemini_mode), horizontal=True)
+    if mode == gemini_mode:
+        show_gemini_mode()
+    else:
+        show_review_mode()
+
+
+def show_gemini_mode():
+    try:
+        from gemini_analysis import (
+            DEFAULT_MODEL, MAX_TEXT_CHARS, GeminiAnalysisError, analyze_with_gemini,
+        )
+    except ImportError:
+        st.error("Gemini режимі үшін google-genai пакетін орнатыңыз.")
+        return
+
+    try:
+        api_key = st.secrets.get("GEMINI_API_KEY", "").strip()
+        model = st.secrets.get("GEMINI_MODEL", "").strip() or DEFAULT_MODEL
+    except StreamlitSecretNotFoundError:
+        api_key, model = "", DEFAULT_MODEL
+
+    if not api_key:
+        st.info("Gemini режимін қосу үшін Secrets бөлімінде GEMINI_API_KEY көрсетіңіз.")
+        return
+
+    with st.form("gemini_analysis"):
+        raw_text = st.text_area(
+            "Қазақша немесе орысша мәтін", max_chars=MAX_TEXT_CHARS, height=220,
+        )
+        st.caption("Талдау батырмасын басқанда мәтін Google Gemini API қызметіне жіберіледі.")
+        submitted = st.form_submit_button("Gemini арқылы талдау", type="primary")
+    if not submitted:
+        return
+
+    text = clean_text(raw_text)
+    if not text:
+        st.warning("Талдау үшін мәтін енгізіңіз.")
+        return
+
+    with st.spinner("Gemini мәтінді талдап жатыр…"):
+        try:
+            result = analyze_with_gemini(text, api_key, model)
+        except (GeminiAnalysisError, ValueError) as exc:
+            st.error(str(exc))
+            return
+
+    tone_labels = {"positive": "Оң", "negative": "Теріс", "neutral": "Бейтарап", "mixed": "Аралас"}
+    st.subheader("Тақырып")
+    st.text(result.topic)
+    st.subheader("Қысқаша мазмұн")
+    st.text(result.summary)
+    st.metric("Тональдылық", tone_labels[result.tone])
+    st.subheader("Мәтіндегі эмоциялар")
+    if result.emotions:
+        for emotion in result.emotions:
+            st.text(f"{emotion.label} — «{emotion.quote}»")
+    else:
+        st.write("Мәтінде айқын эмоция анықталмады.")
+    st.caption(f"Модель · {model}")
+
+
+def show_review_mode():
     st.caption("Қазақ тіліндегі пікірлердің тональдылығы мен эмоциясын талдау")
 
     revision = "main"
@@ -317,7 +385,7 @@ def main():
                  f"**Үзінділер** · {len(result['chunks'])}")
         st.write(f"**Бір үзіндідегі максимум** · {result['max_chunk_tokens']}/{info['max_length']} токен")
         st.write(f"**Жүктеу** · {loaded - started:.2f} сек  **Талдау** · {finished - loaded:.2f} сек")
-        st.write(f"**Процестің ең жоғары RSS** · {peak_mib:,.0f} МиБ  **PyTorch** · {torch.__version__}")
+        st.write(f"**Процестің ең жоғары RSS** · {peak_mib:,.0f} МиБ  **PyTorch** · {version('torch')}")
 
 
 if __name__ == "__main__":
