@@ -218,8 +218,8 @@ def show_results(result, labels, labels_kk):
     else:
         right.metric("Эмоцияның басым белгісі", labels_kk[labels[int(np.argmax(overall_emo))]])
 
-    st.write("**Бүкіл мәтін бойынша эмоция моделінің бағалары**")
-    st.bar_chart(pd.DataFrame({"Орташа баға": overall_emo}, index=[labels_kk[l] for l in labels]))
+    st.subheader("Эмоция моделінің бағалары")
+    show_emotion_chart(labels, labels_kk, overall_emo)
 
     if len(chunks) > 1:
         st.write(f"**Үзінділер бойынша талдау** · {len(chunks)}")
@@ -249,9 +249,53 @@ def show_results(result, labels, labels_kk):
                "Эмоция моделі шағын жиында үйретілген және 60 мәтіндік пилотта бағаланған.")
 
 
+def show_emotion_chart(labels, labels_kk, scores):
+    import altair as alt
+
+    data = pd.DataFrame({
+        "emotion": [labels_kk[label] for label in labels],
+        "score": scores,
+        "leading": np.arange(len(scores)) == int(np.argmax(scores)),
+    })
+    chart = (
+        alt.Chart(data)
+        .mark_bar(cornerRadiusEnd=5, size=17)
+        .encode(
+            y=alt.Y("emotion:N", title=None, sort="-x",
+                    axis=alt.Axis(labelLimit=130)),
+            x=alt.X("score:Q", scale=alt.Scale(domain=[0, 1]),
+                    axis=alt.Axis(format=".0%", title=None, tickCount=5)),
+            color=alt.condition("datum.leading", alt.value("#17624f"), alt.value("#749286")),
+            tooltip=[
+                alt.Tooltip("emotion:N", title="Эмоция"),
+                alt.Tooltip("score:Q", title="Орташа баға", format=".1%"),
+            ],
+        )
+        .properties(height=206)
+        .configure(background="transparent")
+        .configure_view(stroke=None)
+        .configure_axis(labelFontSize=12, labelColor="#294137", gridColor="#ded9c8")
+    )
+    st.altair_chart(chart, width="stretch", theme=None)
+
+
 def show_header():
-    description = "Қазақ тіліндегі пікірлердің тональдылығы мен эмоциялық реңкін анықтауға арналған оқу жобасы."
-    artwork = Path(__file__).parent / "assets" / "review-hero.webp"
+    assets = Path(__file__).parent / "assets"
+    stylesheet = assets / "design.css"
+    if stylesheet.is_file():
+        css = stylesheet.read_text(encoding="utf-8")
+        for placeholder, filename in (
+            ("__SANS__", "noto-sans.woff"),
+            ("__SANS_BOLD__", "noto-sans-bold.woff"),
+            ("__SERIF__", "noto-serif-bold.woff"),
+        ):
+            font = assets / filename
+            if font.is_file():
+                css = css.replace(placeholder, base64.b64encode(font.read_bytes()).decode("ascii"))
+        st.html(f"<style>{css}</style>")
+
+    artwork = assets / "review-panorama.webp"
+    description = "Қазақ тіліндегі пікірлердің тональдылығы мен эмоциялық реңкін талдауға арналған оқу жобасы."
     if not artwork.is_file():
         st.title("Kazakh NLP Analyzer")
         st.write(description)
@@ -259,40 +303,55 @@ def show_header():
 
     encoded = base64.b64encode(artwork.read_bytes()).decode("ascii")
     st.html(f"""
-        <style>
-        .nlp-cover {{
-            display: grid; grid-template-columns: 1.12fr 1fr;
-            background: #103a33; color: #fff7e6; border-radius: 18px;
-            overflow: hidden; margin-bottom: .65rem;
-        }}
-        .nlp-copy {{ padding: clamp(20px, 4vw, 40px); align-self: center; }}
-        .nlp-cover h1 {{
-            font: 600 clamp(32px, 4.5vw, 52px)/1.02 Georgia, serif;
-            letter-spacing: -.045em; color: inherit; margin: 0 0 .7rem; padding: 0;
-        }}
-        .nlp-cover p {{ font-size: .97rem; line-height: 1.5; color: #e4eade; margin: 0; }}
-        .nlp-cover img {{ width: 100%; height: 100%; min-height: 190px; object-fit: cover; }}
-        @media (max-width: 580px) {{
-            .nlp-cover {{ grid-template-columns: 1fr; }}
-            .nlp-cover img {{ height: 105px; min-height: 0; object-position: center 55%; }}
-        }}
-        </style>
-        <header class="nlp-cover">
-            <div class="nlp-copy"><h1>Kazakh NLP Analyzer</h1><p>{description}</p></div>
+        <header class="nlp-cover" lang="kk">
             <img alt="" src="data:image/webp;base64,{encoded}">
+            <div class="nlp-copy">
+                <h1 lang="en">Kazakh NLP<br>Analyzer</h1>
+                <p>{description}</p>
+            </div>
         </header>
     """)
 
 
+def show_project_details():
+    st.html("""
+        <aside class="nlp-project" lang="kk" aria-labelledby="nlp-project-title">
+            <h2 id="nlp-project-title">Жоба туралы</h2>
+            <dl>
+                <div>
+                    <dt>Пікірдің тональдылығы</dt>
+                    <dd>TF-IDF және логистикалық регрессия. KazSAnDRA деректеріндегі 16&nbsp;797 пікір
+                        бойынша екі класқа жіктеу нәтижесі — <span class="nlp-score">macro F1 0,801</span>.</dd>
+                </div>
+                <div>
+                    <dt>Мәтіннің эмоциялық реңкі</dt>
+                    <dd>Қосымша үйретілген E5 моделі алты эмоциялық санатты ажыратады.
+                        Пилоттық бағалау 60 синтетикалық мәтінде жүргізілді.</dd>
+                </div>
+                <div>
+                    <dt>Gemini арқылы талдау</dt>
+                    <dd>Қазақша және орысша мәтіннің тақырыбын, қысқаша мазмұнын, тональдылығы мен
+                        эмоцияларын көрсетеді.</dd>
+                </div>
+            </dl>
+        </aside>
+    """)
+
+
 def main():
-    st.set_page_config(page_title="Kazakh NLP Analyzer", layout="centered")
+    st.set_page_config(page_title="Kazakh NLP Analyzer", layout="wide")
     show_header()
     review_mode, gemini_mode = "Пікірді талдау", "Gemini арқылы талдау"
-    mode = st.radio("Талдау түрі", (review_mode, gemini_mode), horizontal=True)
-    if mode == gemini_mode:
-        show_gemini_mode()
-    else:
-        show_review_mode()
+    with st.container(key="nlp_workspace"):
+        workspace, project = st.columns([2.2, 1], gap="medium")
+        with workspace:
+            mode = st.radio("Талдау түрі", (review_mode, gemini_mode), horizontal=True)
+            if mode == gemini_mode:
+                show_gemini_mode()
+            else:
+                show_review_mode()
+        with project:
+            show_project_details()
 
 
 def show_gemini_mode():
