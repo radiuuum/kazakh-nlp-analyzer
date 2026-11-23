@@ -36,8 +36,8 @@ NEUTRAL_HALF_WIDTH = 0.10
 NEG_THRESHOLD = round(POLARITY_THRESHOLD - NEUTRAL_HALF_WIDTH, 2)  # 0.56
 POS_THRESHOLD = round(POLARITY_THRESHOLD + NEUTRAL_HALF_WIDTH, 2)  # 0.76
 
-REVIEW_MODE_LABEL = "Пікірді талдау"
-GEMINI_MODE_LABEL = "Мәтінді талдау · Gemini"
+MODE_REVIEW = "review"
+MODE_EXTENDED = "extended"
 
 BASE_CATEGORY_KK = {
     "joy": "Қуаныш",
@@ -273,9 +273,13 @@ def analyze(models, text):
     }
 
 
-def _transfer_to_gemini(source_text):
-    st.session_state["gemini_text_input"] = source_text
-    st.session_state["analysis_mode"] = GEMINI_MODE_LABEL
+def _set_mode(mode_key):
+    st.session_state["analysis_mode"] = mode_key
+
+
+def _transfer_to_extended(source_text):
+    st.session_state["extended_text_input"] = source_text
+    st.session_state["analysis_mode"] = MODE_EXTENDED
 
 
 def show_results(result, labels, labels_kk, raw_text):
@@ -369,7 +373,7 @@ def show_results(result, labels, labels_kk, raw_text):
             top = int(np.argmax(emo[i]))
             rows.append({
                 "№": i + 1,
-                "Үзінді": chunk[:90] + ("…" if len(chunk) > 90 else ""),
+                "Үзінді": chunk[:100] + ("…" if len(chunk) > 100 else ""),
                 "Тональдылық": polarity_label(float(p_pos[i])),
                 "Оң тональдылық бағасы": fmt_pct(float(p_pos[i]), decimals=0),
                 "Эмоция": chunk_emotions[i],
@@ -408,9 +412,9 @@ def show_results(result, labels, labels_kk, raw_text):
             """)
 
     st.button(
-        "Осы мәтінді «Мәтінді талдау · Gemini» режимінде ашу →",
-        key="send_to_gemini",
-        on_click=_transfer_to_gemini,
+        "Осы мәтінді «Кеңейтілген талдау» режимінде ашу →",
+        key="send_to_extended",
+        on_click=_transfer_to_extended,
         args=(raw_text,),
     )
 
@@ -431,7 +435,7 @@ def show_emotion_chart(labels, labels_kk, scores):
             "emotion:N",
             title=None,
             sort=order,
-            axis=alt.Axis(labelLimit=140, labelPadding=10, ticks=False, domain=False),
+            axis=alt.Axis(labelLimit=160, labelPadding=12, ticks=False, domain=False),
         ),
         x=alt.X(
             "score:Q",
@@ -439,25 +443,25 @@ def show_emotion_chart(labels, labels_kk, scores):
             axis=alt.Axis(format=".0%", title=None, tickCount=5, ticks=False, domain=False),
         ),
     )
-    bars = base.mark_bar(cornerRadiusEnd=7, height=20).encode(
-        color=alt.condition("datum.leading", alt.value("#2563EB"), alt.value("#CBD5E1")),
+    bars = base.mark_bar(cornerRadiusEnd=7, height=24).encode(
+        color=alt.condition("datum.leading", alt.value("#EA580C"), alt.value("#D4D4D8")),
         tooltip=[
             alt.Tooltip("emotion:N", title="Эмоция"),
             alt.Tooltip("score_label:N", title="Модель бағасы"),
         ],
     )
     labels_layer = base.mark_text(
-        align="left", baseline="middle", dx=8, fontSize=12, fontWeight="bold"
+        align="left", baseline="middle", dx=10, fontSize=14, fontWeight="bold"
     ).encode(
         text=alt.Text("score_label:N"),
-        color=alt.condition("datum.leading", alt.value("#2563EB"), alt.value("#475569")),
+        color=alt.condition("datum.leading", alt.value("#C2410C"), alt.value("#3F3F46")),
     )
     chart = (
         (bars + labels_layer)
-        .properties(height=224)
+        .properties(height=256)
         .configure(background="transparent", font="Inter, NLP Sans, sans-serif")
         .configure_view(stroke=None)
-        .configure_axis(labelFontSize=12, labelColor="#334155", gridColor="#E2E8F0", gridDash=[3, 3])
+        .configure_axis(labelFontSize=14, labelColor="#27272A", gridColor="#E4E4E7", gridDash=[3, 3])
     )
     st.altair_chart(chart, width="stretch", theme=None)
 
@@ -479,39 +483,36 @@ def show_header():
     st.html("""
         <header class="nlp-hero" lang="kk">
             <div class="nlp-hero-content">
-                <div class="nlp-hero-badge">
+                <div class="nlp-hero-eyebrow">
                     <span class="nlp-hero-dot"></span>
                     Қазақ тіліндегі мәтіндерді талдау
                 </div>
                 <h1 lang="en">Kazakh NLP Analyzer</h1>
-                <p>Пікірлер мен мәтіндердің тональдылығын, эмоциялық реңкін және негізгі мазмұнын
-                   жылдам анықтауға арналған сервис. Мәтінді енгізіңіз немесе дайын үлгіні таңдаңыз.</p>
-                <div class="nlp-hero-chips">
-                    <span class="nlp-hero-chip"><span class="nlp-chip-dot nlp-dot-sky"></span>Тональдылық</span>
-                    <span class="nlp-hero-chip"><span class="nlp-chip-dot nlp-dot-violet"></span>6 эмоция санаты</span>
-                    <span class="nlp-hero-chip"><span class="nlp-chip-dot nlp-dot-emerald"></span>Тақырып және мазмұн</span>
-                </div>
+                <p>Пікірлер мен көлемді мәтіндердің тональдылығын, эмоциялық реңкін және
+                   негізгі мазмұнын жылдам анықтайтын талдау жүйесі. Мәтінді енгізіңіз
+                   немесе дайын мысалдарды таңдап тексеріңіз.</p>
             </div>
-            <div class="nlp-hero-visual" aria-hidden="true">
-                <div class="nlp-visual-top">
-                    <div class="nlp-visual-dots">
-                        <span style="background:#38bdf8;"></span>
-                        <span style="background:#818cf8;"></span>
-                        <span style="background:#34d399;"></span>
+            <div class="nlp-hero-aside" aria-hidden="true">
+                <div class="nlp-hero-feature">
+                    <span class="nlp-feature-mark nlp-mark-ink"></span>
+                    <div>
+                        <strong>Тональдылық талдауы</strong>
+                        <span>Оң, теріс және аралас пікірлерді үзінді бойынша бағалау</span>
                     </div>
-                    <span class="nlp-visual-tag">Талдау үлгісі</span>
                 </div>
-                <div class="nlp-visual-row">
-                    <div class="nlp-visual-label"><span>Тональдылық</span><span>Оң</span></div>
-                    <div class="nlp-visual-track"><div class="nlp-visual-fill nlp-fill-1"></div></div>
+                <div class="nlp-hero-feature">
+                    <span class="nlp-feature-mark nlp-mark-accent"></span>
+                    <div>
+                        <strong>6 эмоция санаты</strong>
+                        <span>Қуаныш, ашу, мұң, қорқыныш, таңдану және бейтарап</span>
+                    </div>
                 </div>
-                <div class="nlp-visual-row">
-                    <div class="nlp-visual-label"><span>Қуаныш</span><span>Басым</span></div>
-                    <div class="nlp-visual-track"><div class="nlp-visual-fill nlp-fill-2"></div></div>
-                </div>
-                <div class="nlp-visual-row">
-                    <div class="nlp-visual-label"><span>Таңдану</span><span>Орташа</span></div>
-                    <div class="nlp-visual-track"><div class="nlp-visual-fill nlp-fill-3"></div></div>
+                <div class="nlp-hero-feature">
+                    <span class="nlp-feature-mark nlp-mark-pos"></span>
+                    <div>
+                        <strong>Тақырып пен қысқаша мазмұн</strong>
+                        <span>Қазақ және орыс тіліндегі ұзын мәтіндерді құрылымдау</span>
+                    </div>
                 </div>
             </div>
         </header>
@@ -526,22 +527,28 @@ def show_models_and_details():
             <p class="nlp-models-sub">Әр талдау түріне өзіне бейімделген жеке модель жауап береді.</p>
             <div class="nlp-models-grid">
                 <article class="nlp-model-card">
-                    <div class="nlp-model-num nlp-num-blue">01</div>
-                    <div class="nlp-model-role">Тональдылық</div>
+                    <div class="nlp-model-top">
+                        <span class="nlp-model-num">01</span>
+                        <span class="nlp-model-role">Тональдылық</span>
+                    </div>
                     <div class="nlp-model-name">TF-IDF + логистикалық регрессия</div>
                     <p>Модель пікірдің оң немесе теріс екенін бағалайды. Мәтінде айқын оң және
                        айқын теріс үзінділер қатар анықталса, нәтиже «Аралас» деп көрсетіледі.</p>
                 </article>
                 <article class="nlp-model-card">
-                    <div class="nlp-model-num nlp-num-violet">02</div>
-                    <div class="nlp-model-role">Эмоциялық реңк</div>
+                    <div class="nlp-model-top">
+                        <span class="nlp-model-num">02</span>
+                        <span class="nlp-model-role">Эмоциялық реңк</span>
+                    </div>
                     <div class="nlp-model-name">E5-small (қосымша үйретілген)</div>
                     <p>Мәтіндегі алты негізгі эмоцияның үлесін бағалап,
                        қай көңіл-күйдің басым екенін көрсетеді.</p>
                 </article>
                 <article class="nlp-model-card">
-                    <div class="nlp-model-num nlp-num-cyan">03</div>
-                    <div class="nlp-model-role">Тақырып және мазмұн</div>
+                    <div class="nlp-model-top">
+                        <span class="nlp-model-num">03</span>
+                        <span class="nlp-model-role">Кеңейтілген талдау</span>
+                    </div>
                     <div class="nlp-model-name">Google Gemini</div>
                     <p>Қазақ және орыс тіліндегі ұзын мәтіндердің тақырыбын, қысқаша мазмұнын,
                        жағымды және теріс тұстарын, сарказм белгісін, эмоцияларын және
@@ -567,8 +574,8 @@ def show_models_and_details():
                             <span class="step">Үзінділерге бөлу</span>
                             <span class="arrow">→</span>
                             <div class="nlp-parallel">
-                                <span class="step step-blue">Тональдылық: TF-IDF + логистикалық регрессия</span>
-                                <span class="step step-violet">Эмоция: E5</span>
+                                <span class="step step-model">Тональдылық: TF-IDF + логистикалық регрессия</span>
+                                <span class="step step-accent">Эмоция: E5</span>
                             </div>
                             <span class="arrow">→</span>
                             <span class="step">Үзінді бағаларын біріктіру</span>
@@ -577,11 +584,11 @@ def show_models_and_details():
                         </div>
                     </div>
                     <div class="nlp-branch">
-                        <div class="nlp-branch-title">Мәтінді талдау · Gemini</div>
+                        <div class="nlp-branch-title">Кеңейтілген талдау (Gemini)</div>
                         <div class="nlp-flow">
                             <span class="step">Толық мәтін</span>
                             <span class="arrow">→</span>
-                            <span class="step step-cyan">Gemini API</span>
+                            <span class="step step-accent">Gemini API</span>
                             <span class="arrow">→</span>
                             <span class="step step-result">Тақырып, қысқаша мазмұн, жағымды/теріс тұстар, тональдылық, эмоциялар және мәтіннен алынған дәйексөздер</span>
                         </div>
@@ -631,9 +638,9 @@ def show_models_and_details():
                             нәтиже «Анықталмады» деп көрсетіледі.
                         </li>
                         <li>
-                            <strong>Gemini шектеуі және дәйексөз тексерісі:</strong>
-                            режим <span class="nlp-mono">20&#8239;000</span> таңбаға дейінгі мәтінді
-                            қабылдайды; интерфейс тек бастапқы мәтінде дәл кездесетін дәйексөздерді
+                            <strong>Кеңейтілген режим шектеуі және дәйексөз тексерісі:</strong>
+                            Gemini режимі <span class="nlp-mono">20&#8239;000</span> таңбаға дейінгі
+                            мәтінді қабылдайды; интерфейс тек бастапқы мәтінде кездесетін дәйексөздерді
                             ғана көрсетеді.
                         </li>
                         <li>
@@ -651,30 +658,49 @@ def main():
     st.set_page_config(page_title="Kazakh NLP Analyzer", layout="wide")
     show_header()
     if "analysis_mode" not in st.session_state:
-        st.session_state["analysis_mode"] = REVIEW_MODE_LABEL
+        st.session_state["analysis_mode"] = MODE_REVIEW
+
+    active_mode = st.session_state["analysis_mode"]
 
     with st.container(key="nlp_workspace"):
-        mode = st.radio(
-            "Талдау түрі",
-            (REVIEW_MODE_LABEL, GEMINI_MODE_LABEL),
-            key="analysis_mode",
-            horizontal=True,
-            label_visibility="collapsed",
-        )
-        if mode == GEMINI_MODE_LABEL:
-            show_gemini_mode()
+        with st.container(key="nlp_mode_tabs"):
+            tab_left, tab_right = st.columns(2, gap="small")
+            tab_left.button(
+                "Пікірді талдау",
+                key="tab_btn_review",
+                type="primary" if active_mode == MODE_REVIEW else "secondary",
+                on_click=_set_mode,
+                args=(MODE_REVIEW,),
+                width="stretch",
+            )
+            tab_right.button(
+                "Кеңейтілген талдау",
+                key="tab_btn_extended",
+                type="primary" if active_mode == MODE_EXTENDED else "secondary",
+                on_click=_set_mode,
+                args=(MODE_EXTENDED,),
+                width="stretch",
+            )
+
+        if active_mode == MODE_EXTENDED:
+            show_extended_mode()
         else:
             show_review_mode()
 
     show_models_and_details()
 
 
-def _apply_gemini_preset(sample_text):
-    st.session_state["gemini_text_input"] = sample_text
+def _apply_extended_preset(sample_text):
+    st.session_state["extended_text_input"] = sample_text
 
 
-def show_gemini_mode():
-    st.caption("Қазақша немесе орысша мәтіннің тақырыбын, қысқаша мазмұнын, тональдылығы мен эмоцияларын анықтайды.")
+def show_extended_mode():
+    st.html(
+        '<p class="nlp-mode-lead">'
+        "Қазақша немесе орысша мәтіннің тақырыбын, қысқаша мазмұнын, "
+        "тональдылығы мен эмоцияларын және негізгі ойларын анықтайды."
+        "</p>"
+    )
     try:
         from gemini_analysis import (
             DEFAULT_MODEL,
@@ -696,42 +722,47 @@ def show_gemini_mode():
         st.info("Бұл режимді қосу үшін Secrets бөлімінде GEMINI_API_KEY көрсетіңіз.")
         return
 
-    if "gemini_text_input" not in st.session_state:
-        st.session_state["gemini_text_input"] = ""
+    if "extended_text_input" not in st.session_state:
+        st.session_state["extended_text_input"] = ""
 
-    gemini_presets = [
-        ("Аралас пікір (үстел)", LONG_REVIEW),
-        ("Ұзын мәтін (коммуналдық төлем)", LONG_STORY),
-        ("Сарказм үлгісі", SARCASM_SAMPLE),
+    extended_presets = [
+        ("Толық аралас пікір", LONG_REVIEW),
+        ("Көлемді оқиға", LONG_STORY),
+        ("Сарказм мысалы", SARCASM_SAMPLE),
         ("Орысша аралас пікір", RUSSIAN_MIXED_SAMPLE),
     ]
 
-    st.html('<div class="nlp-preset-label">Дайын үлгілер</div>')
+    st.html("""
+        <div class="nlp-presets-header">
+            <strong>Тексеруге арналған дайын мысалдар</strong>
+            <span>Жүйені бірден сынап көру үшін мысалдардың бірін таңдаңыз немесе төмендегі өріске өз мәтініңізді жазыңыз.</span>
+        </div>
+    """)
     with st.container(key="nlp_gemini_presets"):
-        cols = st.columns([1.25, 1.55, 1.05, 1.25, 0.75], gap="small")
-        for col, (label, sample) in zip(cols[:-1], gemini_presets):
+        cols = st.columns([1.2, 1.15, 1.1, 1.25, 0.75], gap="small")
+        for col, (label, sample) in zip(cols[:-1], extended_presets):
             col.button(
                 label,
-                key=f"gemini_preset_{label}",
-                on_click=_apply_gemini_preset,
+                key=f"ext_preset_{label}",
+                on_click=_apply_extended_preset,
                 args=(sample,),
                 width="stretch",
             )
         cols[-1].button(
             "Тазалау",
-            key="gemini_preset_clear",
-            on_click=_apply_gemini_preset,
+            key="ext_preset_clear",
+            on_click=_apply_extended_preset,
             args=("",),
             width="stretch",
         )
 
-    with st.form("gemini_analysis"):
+    with st.form("extended_analysis"):
         raw_text = st.text_area(
             "Қазақша немесе орысша мәтін",
-            key="gemini_text_input",
+            key="extended_text_input",
             max_chars=MAX_TEXT_CHARS,
-            height=210,
-            placeholder="Талдауға арналған мәтінді осында енгізіңіз немесе жоғарыдағы үлгіні таңдаңыз…",
+            height=260,
+            placeholder="Талдауға арналған мәтінді осында енгізіңіз немесе жоғарыдағы мысалдардың бірін таңдаңыз…",
         )
         submitted = st.form_submit_button("Талдау", type="primary")
     if not submitted:
@@ -745,7 +776,13 @@ def show_gemini_mode():
     with st.spinner("Мәтін талданып жатыр…"):
         try:
             result = analyze_with_gemini(text, api_key, model)
-        except (GeminiAnalysisError, ValueError) as exc:
+        except GeminiAnalysisError as exc:
+            st.error(str(exc))
+            if getattr(exc, "detail", ""):
+                with st.expander("Қате туралы техникалық мәлімет"):
+                    st.code(exc.detail, language="text")
+            return
+        except ValueError as exc:
             st.error(str(exc))
             return
 
@@ -793,7 +830,7 @@ def show_gemini_mode():
         <section class="nlp-grid-2" lang="kk">
             <div class="nlp-card nlp-card-accent">
                 <div class="nlp-card-label">Тақырып</div>
-                <div class="nlp-card-value" style="font-size: 1.14rem; line-height: 1.4;">
+                <div class="nlp-card-value" style="font-size: 1.32rem; line-height: 1.38;">
                     {html.escape(result.topic)}
                 </div>
                 {pills_block}
@@ -808,11 +845,9 @@ def show_gemini_mode():
                 {sarcasm_html}
             </div>
         </section>
-        <div class="nlp-card" style="margin-bottom: 1rem;">
+        <div class="nlp-card" style="margin-bottom: 1.15rem;">
             <div class="nlp-card-label">Қысқаша мазмұн</div>
-            <p style="margin: 0; font-size: 0.95rem; line-height: 1.64; color: #334155;">
-                {html.escape(result.summary)}
-            </p>
+            <p class="nlp-summary-text">{html.escape(result.summary)}</p>
         </div>
     """)
 
@@ -847,7 +882,7 @@ def show_gemini_mode():
     st.html("""
         <div class="nlp-section-head nlp-section-head-stack">
             <h3>Мәтіндегі эмоциялар мен дәйексөздер</h3>
-            <p class="nlp-section-note">Эмоция атауын Gemini ұсынады, ал дәйексөз мәтіннен алынады.</p>
+            <p class="nlp-section-note">Эмоция атауын модель ұсынады, ал дәйексөз мәтіннен алынады.</p>
         </div>
     """)
     if result.emotions:
@@ -887,6 +922,11 @@ def _apply_preset(sample_text):
 
 
 def show_review_mode():
+    st.html(
+        '<p class="nlp-mode-lead">'
+        "Қазақ тіліндегі пікірдің тональдылығын және алты эмоция санаты бойынша реңкін бағалайды."
+        "</p>"
+    )
     revision = "main"
     try:
         repo_id = st.secrets.get("SENTIMENT_REPO_ID", "")
@@ -918,36 +958,42 @@ def show_review_mode():
     presets = [
         ("Оң пікір", short),
         ("Теріс пікір", negative),
-        ("Қысқа аралас", short_mixed),
+        ("Қысқа аралас пікір", short_mixed),
         ("Аралас пікір", mixed),
         ("Орташа пікір", medium),
-        ("Ұзын пікір (үстел)", LONG_REVIEW),
+        ("Толық пікір", LONG_REVIEW),
+        ("Көлемді мәтін", LONG_STORY),
     ]
 
     if "review_text_input" not in st.session_state:
         st.session_state["review_text_input"] = ""
 
-    st.html('<div class="nlp-preset-label">Дайын үлгілер</div>')
+    st.html("""
+        <div class="nlp-presets-header">
+            <strong>Тексеруге арналған дайын мысалдар</strong>
+            <span>Жүйені бірден сынап көру үшін мысалдардың бірін таңдаңыз немесе төмендегі өріске өз пікіріңізді жазыңыз.</span>
+        </div>
+    """)
     with st.container(key="nlp_presets"):
-        for row_start in range(0, len(presets), 3):
-            cols = st.columns(3, gap="small")
-            for col, (label, sample) in zip(cols, presets[row_start : row_start + 3]):
-                col.button(
-                    label,
-                    key=f"preset_{label}",
-                    on_click=_apply_preset,
-                    args=(sample,),
-                    width="stretch",
-                )
-        extra_left, extra_right = st.columns([2, 1], gap="small")
-        extra_left.button(
-            "Ұзын мәтін (коммуналдық төлем)",
-            key="preset_long_story",
-            on_click=_apply_preset,
-            args=(LONG_STORY,),
-            width="stretch",
-        )
-        extra_right.button(
+        row1 = st.columns(4, gap="small")
+        for col, (label, sample) in zip(row1, presets[:4]):
+            col.button(
+                label,
+                key=f"preset_{label}",
+                on_click=_apply_preset,
+                args=(sample,),
+                width="stretch",
+            )
+        row2 = st.columns(4, gap="small")
+        for col, (label, sample) in zip(row2[:3], presets[4:]):
+            col.button(
+                label,
+                key=f"preset_{label}",
+                on_click=_apply_preset,
+                args=(sample,),
+                width="stretch",
+            )
+        row2[3].button(
             "Тазалау",
             key="preset_clear",
             on_click=_apply_preset,
@@ -960,8 +1006,8 @@ def show_review_mode():
             "Қазақша пікір",
             key="review_text_input",
             max_chars=MAX_CHARS,
-            height=185,
-            placeholder="Пікір мәтінін осында енгізіңіз немесе жоғарыдағы үлгіні таңдаңыз…",
+            height=245,
+            placeholder="Пікір мәтінін осында енгізіңіз немесе жоғарыдағы мысалдардың бірін таңдаңыз…",
         )
         submitted = st.form_submit_button("Талдау", type="primary")
     if not submitted:
