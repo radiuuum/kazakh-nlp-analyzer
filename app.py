@@ -61,6 +61,21 @@ LONG_STORY = """Қала шетіндегі ескі бес қабатты үй�
 Келесі есептік кезеңде-ақ түбіртекте ұқыпты қайта есептеу пайда болып, артық төленген сома алдағы төлемдердің есебіне жазылды. Мұны естіген Валентина апай басын изеп, ендігіде көрсеткіштерді қағазға жазып, кіреберістегі жәшікке тастап жүрмес үшін өзіне де жеке кабинет ашып беруді сұрады. Осылайша қарапайым тұрмыстық жағдай көршілермен жақынырақ араласуға себеп болып, тіпті коммуналдық мәселелерді де артық жүйке жұқартпай шешуге болатынын көрсетті."""
 
 
+def fmt_num(value, decimals=2):
+    """Форматирует десятичное число для интерфейса через запятую."""
+    return f"{float(value):.{decimals}f}".replace(".", ",")
+
+
+def fmt_pct(value, decimals=1):
+    """Форматирует долю [0, 1] в проценты с запятой для интерфейса."""
+    return f"{float(value) * 100:.{decimals}f}%".replace(".", ",")
+
+
+def fmt_int(value):
+    """Форматирует целое число с неразрывным пробелом для разрядов тысяч."""
+    return f"{int(round(value)):,}".replace(",", " ")
+
+
 def clean_text(text):
     text = unicodedata.normalize("NFC", text).replace("\r\n", "\n").replace("\r", "\n")
     text = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]", "", text)
@@ -262,12 +277,15 @@ def show_results(result, labels, labels_kk):
     else:
         top_idx = int(np.argmax(overall_emo))
         top_emo = labels_kk[labels[top_idx]]
-        top_score = float(overall_emo[top_idx]) * 100.0
+        top_score_text = fmt_pct(overall_emo[top_idx], decimals=1)
         right_body = f"""
             <div class="nlp-card-label">Басым эмоция</div>
             <div class="nlp-card-value-row">
                 <span class="nlp-card-value">{html.escape(top_emo)}</span>
-                <span class="nlp-score">{top_score:.1f}%</span>
+                <div class="nlp-score-meta">
+                    <span class="nlp-score-caption">Модель бағасы</span>
+                    <span class="nlp-score">{top_score_text}</span>
+                </div>
             </div>
             <div class="nlp-subnote">Бүкіл мәтін бойынша ең айқын байқалған эмоциялық реңк.</div>
         """
@@ -278,7 +296,10 @@ def show_results(result, labels, labels_kk):
                 <div class="nlp-card-label">Жалпы тональдылық</div>
                 <div class="nlp-card-value-row">
                     <span class="nlp-card-value">{html.escape(tone_text)}</span>
-                    <span class="nlp-badge {badge_cls}">{overall_pos:.0%}</span>
+                    <div class="nlp-score-meta">
+                        <span class="nlp-score-caption">Оң тональдылық бағасы</span>
+                        <span class="nlp-badge {badge_cls}">{fmt_pct(overall_pos, decimals=0)}</span>
+                    </div>
                 </div>
                 <div class="nlp-scale-wrap">
                     <div class="nlp-scale-track">
@@ -319,9 +340,9 @@ def show_results(result, labels, labels_kk):
                 "№": i + 1,
                 "Үзінді": chunk[:90] + ("…" if len(chunk) > 90 else ""),
                 "Тональдылық": polarity_label(float(p_pos[i])),
-                "Оң баға": f"{float(p_pos[i]):.0%}",
+                "Оң тональдылық бағасы": fmt_pct(float(p_pos[i]), decimals=0),
                 "Эмоция": chunk_emotions[i],
-                "Үлесі": f"{float(emo[i][top]):.0%}",
+                "Модель бағасы": fmt_pct(float(emo[i][top]), decimals=1),
             })
         st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
 
@@ -341,14 +362,14 @@ def show_results(result, labels, labels_kk):
                     <div class="nlp-excerpt nlp-excerpt-neg">
                         <div class="nlp-excerpt-meta">
                             <span>{html.escape(neg_title)} · №{most_neg + 1}</span>
-                            <span class="nlp-mono">{p_pos[most_neg]:.0%}</span>
+                            <span class="nlp-mono">{fmt_pct(p_pos[most_neg], decimals=0)}</span>
                         </div>
                         <p>{html.escape(chunks[most_neg])}</p>
                     </div>
                     <div class="nlp-excerpt nlp-excerpt-pos">
                         <div class="nlp-excerpt-meta">
                             <span>{html.escape(pos_title)} · №{most_pos + 1}</span>
-                            <span class="nlp-mono">{p_pos[most_pos]:.0%}</span>
+                            <span class="nlp-mono">{fmt_pct(p_pos[most_pos], decimals=0)}</span>
                         </div>
                         <p>{html.escape(chunks[most_pos])}</p>
                     </div>
@@ -361,7 +382,8 @@ def show_emotion_chart(labels, labels_kk, scores):
 
     data = pd.DataFrame({
         "emotion": [labels_kk[label] for label in labels],
-        "score": scores,
+        "score": [float(s) for s in scores],
+        "score_label": [fmt_pct(float(s), decimals=1) for s in scores],
         "leading": np.arange(len(scores)) == int(np.argmax(scores)),
     }).sort_values("score", ascending=False, kind="mergesort")
 
@@ -383,13 +405,13 @@ def show_emotion_chart(labels, labels_kk, scores):
         color=alt.condition("datum.leading", alt.value("#2563EB"), alt.value("#CBD5E1")),
         tooltip=[
             alt.Tooltip("emotion:N", title="Эмоция"),
-            alt.Tooltip("score:Q", title="Баға", format=".1%"),
+            alt.Tooltip("score_label:N", title="Модель бағасы"),
         ],
     )
     labels_layer = base.mark_text(
         align="left", baseline="middle", dx=8, fontSize=12, fontWeight="bold"
     ).encode(
-        text=alt.Text("score:Q", format=".1%"),
+        text=alt.Text("score_label:N"),
         color=alt.condition("datum.leading", alt.value("#2563EB"), alt.value("#475569")),
     )
     chart = (
@@ -469,8 +491,8 @@ def show_models_and_details():
                     <div class="nlp-model-num nlp-num-blue">01</div>
                     <div class="nlp-model-role">Тональдылық</div>
                     <div class="nlp-model-name">TF-IDF + логистикалық регрессия</div>
-                    <p>Қазақша пікірдің оң, теріс не аралас екенін анықтайды.
-                       Ұзын пікірлерді үзінділерге бөліп, әр бөлікті жеке бағалайды.</p>
+                    <p>Модель пікірдің оң немесе теріс екенін бағалайды. Мәтінде айқын оң және
+                       айқын теріс үзінділер қатар анықталса, нәтиже «Аралас» деп көрсетіледі.</p>
                 </article>
                 <article class="nlp-model-card">
                     <div class="nlp-model-num nlp-num-violet">02</div>
@@ -483,57 +505,104 @@ def show_models_and_details():
                     <div class="nlp-model-num nlp-num-cyan">03</div>
                     <div class="nlp-model-role">Тақырып және мазмұн</div>
                     <div class="nlp-model-name">Google Gemini</div>
-                    <p>Қазақ және орыс тіліндегі ұзын мәтіндердің тақырыбын, қысқаша мазмұнын
-                       және мәтінде расталған эмоциялық дәйексөздерді шығарады.</p>
+                    <p>Қазақ және орыс тіліндегі ұзын мәтіндердің тақырыбын, қысқаша мазмұнын,
+                       тональдылығы мен эмоцияларын және мәтіннен алынған дәйексөздерді көрсетеді.</p>
                 </article>
             </div>
         </section>
     """)
 
+    threshold_str = fmt_num(POLARITY_THRESHOLD, 2)
+    neg_str = fmt_num(NEG_THRESHOLD, 2)
+    pos_str = fmt_num(POS_THRESHOLD, 2)
+
     with st.expander("Жобаның толық сипаттамасы және зерттеу нәтижелері"):
         st.html(f"""
             <div lang="kk">
-                <div class="nlp-pipeline">
-                    <span class="step">Мәтін</span> →
-                    <span class="step">Үзінділерге бөлу</span> →
-                    <span class="step">TF-IDF + LogReg</span> &amp;
-                    <span class="step">E5-small</span> /
-                    <span class="step">Gemini API</span>
+                <div class="nlp-schema">
+                    <div class="nlp-branch">
+                        <div class="nlp-branch-title">Пікірді талдау</div>
+                        <div class="nlp-flow">
+                            <span class="step">Мәтін</span>
+                            <span class="arrow">→</span>
+                            <span class="step">Үзінділерге бөлу</span>
+                            <span class="arrow">→</span>
+                            <div class="nlp-parallel">
+                                <span class="step step-blue">Тональдылық: TF-IDF + логистикалық регрессия</span>
+                                <span class="step step-violet">Эмоция: E5</span>
+                            </div>
+                            <span class="arrow">→</span>
+                            <span class="step">Үзінді бағаларын біріктіру</span>
+                            <span class="arrow">→</span>
+                            <span class="step step-result">Жалпы нәтиже және үзінділер бойынша талдау</span>
+                        </div>
+                    </div>
+                    <div class="nlp-branch">
+                        <div class="nlp-branch-title">Мәтінді талдау · Gemini</div>
+                        <div class="nlp-flow">
+                            <span class="step">Толық мәтін</span>
+                            <span class="arrow">→</span>
+                            <span class="step step-cyan">Gemini API</span>
+                            <span class="arrow">→</span>
+                            <span class="step step-result">Тақырып, қысқаша мазмұн, тональдылық, эмоциялар және мәтіннен алынған дәйексөздер</span>
+                        </div>
+                    </div>
                 </div>
+
                 <div class="nlp-detail-grid">
                     <div class="nlp-detail-box">
                         <div class="nlp-detail-head">
                             <strong>Тональдылық моделі (KazSAnDRA)</strong>
-                            <span class="nlp-score">macro F1 0.8014</span>
+                            <span class="nlp-score">macro F1 0,8014</span>
                         </div>
-                        <p><span class="nlp-mono">16 797</span> бүтін пікірден тұратын тест жиынында
-                           шекті <span class="nlp-mono">0.50 → {POLARITY_THRESHOLD:.2f}</span> ауыстыру
-                           macro F1 мәнін <span class="nlp-mono">0.7819</span>-дан
-                           <span class="nlp-mono">0.8014</span>-ке өсірді. Теріс класс recall
-                           <span class="nlp-mono">0.539 → 0.669</span> өсті, precision —
-                           <span class="nlp-mono">0.758 → 0.678</span>.</p>
+                        <p>Бинарлық тональдылық есебінде KazSAnDRA тестіндегі
+                           <span class="nlp-mono">16&#8239;797</span> бүтін пікірде шекті
+                           <span class="nlp-mono">0,50 → {threshold_str}</span> ауыстыру
+                           macro F1 мәнін <span class="nlp-mono">0,7819</span>-дан
+                           <span class="nlp-mono">0,8014</span>-ке өсірді.</p>
+                        <p class="nlp-detail-sub">Теріс класс recall
+                           <span class="nlp-mono">0,539 → 0,669</span> өсті, precision —
+                           <span class="nlp-mono">0,758 → 0,678</span>.</p>
                     </div>
                     <div class="nlp-detail-box">
                         <div class="nlp-detail-head">
-                            <strong>Эмоция моделі (E5-small пилот)</strong>
-                            <span class="nlp-score">43 / 60 · F1 0.722</span>
+                            <strong>Эмоция моделі (E5-small)</strong>
+                            <span class="nlp-score">43 / 60 · F1 0,722</span>
                         </div>
-                        <p>Қазақша кезеңде <span class="nlp-mono">144</span> оқыту,
-                           <span class="nlp-mono">36</span> валидация және <span class="nlp-mono">60</span>
-                           пилоттық синтетикалық мәтін қолданылды. Қосымша оқытудан кейін macro F1
-                           <span class="nlp-mono">0.436 → 0.722</span> өсті (салыстыру: Kaz-RoBERTa —
-                           <span class="nlp-mono">45/60</span>, macro F1 <span class="nlp-mono">0.753</span>).</p>
+                        <p>Синтетикалық пилоттық жиында E5 <span class="nlp-mono">60</span>
+                           мәтіннің <span class="nlp-mono">43</span>-ін дұрыс анықтады
+                           (<span class="nlp-mono">macro F1 0,722</span>).</p>
+                        <p class="nlp-detail-sub">Қазақша кезеңде
+                           <span class="nlp-mono">144</span> оқыту, <span class="nlp-mono">36</span>
+                           валидация және <span class="nlp-mono">60</span> пилоттық синтетикалық мәтін
+                           қолданылды. Сол пилотта <span class="nlp-mono">Kaz-RoBERTa</span>
+                           <span class="nlp-mono">60</span>-тан <span class="nlp-mono">45</span> дұрыс жауап,
+                           <span class="nlp-mono">macro F1 0,753</span> көрсетті.</p>
                     </div>
                 </div>
-                <div class="nlp-detail-note">
-                    <strong>Шектер мен ережелер:</strong> негізгі шек
-                    <span class="nlp-mono">{POLARITY_THRESHOLD:.2f}</span> валидацияда таңдалған;
-                    <span class="nlp-mono">{NEG_THRESHOLD:.2f}–{POS_THRESHOLD:.2f}</span>
-                    (±<span class="nlp-mono">{NEUTRAL_HALF_WIDTH:.2f}</span>) аралығы «Анықталмады»
-                    белгісіздік аймағы ретінде эвристикамен берілген. Мәтінде айқын оң және айқын
-                    теріс үзінділер қатар кездессе, «Аралас» белгісі қойылады. Ұзын мәтін режимі
-                    <span class="nlp-mono">20 000</span> таңбаға дейін қабылдап, бастапқы мәтінде
-                    дәл кездесетін дәйексөздерді ғана қалдырады; E5 ықтималдықтары бөлек калибрленбеген.
+
+                <div class="nlp-rules-box">
+                    <div class="nlp-rules-title">Шектер мен ережелер</div>
+                    <ul class="nlp-rules-list">
+                        <li>
+                            <strong>Тональдылық шегі:</strong>
+                            <span class="nlp-mono">{threshold_str}</span> — бинарлық экспериментте
+                            валидация арқылы таңдалған шек. Сайтта баға
+                            <span class="nlp-mono">{neg_str}–{pos_str}</span> аралығына түссе,
+                            нәтиже «Анықталмады» деп көрсетіледі.
+                        </li>
+                        <li>
+                            <strong>Gemini шектеуі және дәйексөз тексерісі:</strong>
+                            режим <span class="nlp-mono">20&#8239;000</span> таңбаға дейінгі мәтінді
+                            қабылдайды; интерфейс тек бастапқы мәтінде дәл кездесетін дәйексөздерді
+                            ғана көрсетеді.
+                        </li>
+                        <li>
+                            <strong>E5 пайыздары:</strong>
+                            карточка мен графиктегі пайыздар — модельдің ішкі бағалары,
+                            олардың калибрленуі әзірге тексерілмеген.
+                        </li>
+                    </ul>
                 </div>
             </div>
         """)
@@ -542,15 +611,15 @@ def show_models_and_details():
 def main():
     st.set_page_config(page_title="Kazakh NLP Analyzer", layout="wide")
     show_header()
-    review_mode, extended_mode = "Пікірді талдау", "Ұзын мәтін және мазмұн"
+    review_mode, gemini_mode = "Пікірді талдау", "Мәтінді талдау · Gemini"
     with st.container(key="nlp_workspace"):
         mode = st.radio(
             "Талдау түрі",
-            (review_mode, extended_mode),
+            (review_mode, gemini_mode),
             horizontal=True,
             label_visibility="collapsed",
         )
-        if mode == extended_mode:
+        if mode == gemini_mode:
             show_gemini_mode()
         else:
             show_review_mode()
@@ -633,9 +702,9 @@ def show_gemini_mode():
     """)
 
     st.html("""
-        <div class="nlp-section-head">
+        <div class="nlp-section-head nlp-section-head-stack">
             <h3>Мәтіндегі эмоциялар мен дәйексөздер</h3>
-            <span>Мәтіннен алынған дәл үзінділер</span>
+            <p class="nlp-section-note">Эмоция атауын Gemini ұсынады, ал дәйексөз мәтіннен алынады.</p>
         </div>
     """)
     if result.emotions:
@@ -645,7 +714,7 @@ def show_gemini_mode():
                 <div class="nlp-quote-card">
                     <div class="nlp-quote-top">
                         <span class="nlp-quote-emotion">{html.escape(emotion.label)}</span>
-                        <span class="nlp-quote-verified">✓ Мәтінде расталды</span>
+                        <span class="nlp-quote-source">Мәтіннен алынған</span>
                     </div>
                     <p class="nlp-quote-text">«{html.escape(emotion.quote)}»</p>
                 </div>
@@ -763,12 +832,15 @@ def show_review_mode():
     peak_mib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
     with st.expander("Техникалық ақпарат"):
         st.write(
-            f"**Таңбалар** · {len(raw_text)}  **Токендер** · {sum(result['weights'])}  "
+            f"**Таңбалар** · {fmt_int(len(raw_text))}  **Токендер** · {fmt_int(sum(result['weights']))}  "
             f"**Үзінділер** · {len(result['chunks'])}"
         )
         st.write(f"**Бір үзіндідегі максимум** · {result['max_chunk_tokens']}/{info['max_length']} токен")
-        st.write(f"**Жүктеу** · {loaded - started:.2f} сек  **Талдау** · {finished - loaded:.2f} сек")
-        st.write(f"**Процестің ең жоғары RSS** · {peak_mib:,.0f} МиБ  **PyTorch** · {version('torch')}")
+        st.write(
+            f"**Жүктеу** · {fmt_num(loaded - started, 2)} сек  "
+            f"**Талдау** · {fmt_num(finished - loaded, 2)} сек"
+        )
+        st.write(f"**Процестің ең жоғары RSS** · {fmt_int(peak_mib)} МиБ  **PyTorch** · {version('torch')}")
 
 
 if __name__ == "__main__":
