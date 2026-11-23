@@ -36,6 +36,18 @@ NEUTRAL_HALF_WIDTH = 0.10
 NEG_THRESHOLD = round(POLARITY_THRESHOLD - NEUTRAL_HALF_WIDTH, 2)  # 0.56
 POS_THRESHOLD = round(POLARITY_THRESHOLD + NEUTRAL_HALF_WIDTH, 2)  # 0.76
 
+REVIEW_MODE_LABEL = "Пікірді талдау"
+GEMINI_MODE_LABEL = "Мәтінді талдау · Gemini"
+
+BASE_CATEGORY_KK = {
+    "joy": "Қуаныш",
+    "anger": "Ашу",
+    "sadness": "Мұң",
+    "fear": "Қорқыныш",
+    "surprise": "Таңдану",
+    "neutral": "Бейтарап",
+}
+
 LONG_REVIEW = """Өткен аптада үйге жұмыс істеуге ыңғайлы үстелге тапсырыс бердім. Сайттан өлшемін, түсін және жеткізу уақытын алдын ала таңдадым. Төлемнен кейін растау хаты бірден келді. Суреттері анық, сипаттамасы түсінікті болды. Тапсырысты рәсімдеу кезінде аса көп уақыт жұмсамадым. Бағасы басқа дүкендермен салыстырғанда қолайлы көрінді.
 
 Жеткізу жұма күні түстен кейін болады деп көрсетілген еді. Сол күні таңертең курьер телефон соғып, мекенжайды нақтылады. Алайда келісілген уақытта ешкім келмеді. Хабарлама да, жаңа уақыт туралы ескерту де болған жоқ. Мен бірнеше сағат үйде күтіп, басқа жоспарларымды кейінге қалдырдым. Уақыттың өзгергенін ертерек білсем, күнімді басқаша жоспарлар едім.
@@ -60,6 +72,20 @@ LONG_STORY = """Қала шетіндегі ескі бес қабатты үй�
 
 Келесі есептік кезеңде-ақ түбіртекте ұқыпты қайта есептеу пайда болып, артық төленген сома алдағы төлемдердің есебіне жазылды. Мұны естіген Валентина апай басын изеп, ендігіде көрсеткіштерді қағазға жазып, кіреберістегі жәшікке тастап жүрмес үшін өзіне де жеке кабинет ашып беруді сұрады. Осылайша қарапайым тұрмыстық жағдай көршілермен жақынырақ араласуға себеп болып, тіпті коммуналдық мәселелерді де артық жүйке жұқартпай шешуге болатынын көрсетті."""
 
+SARCASM_SAMPLE = (
+    "Қызмет көрсету «керемет» екен: тапсырыс берген тамақты тура бір жарым сағат күттік. "
+    "Даяшы екі рет келіп, бәрі дайын болып қалды деп күлімсіреп кетті. "
+    "Соңында сорпа суып қалған күйі келді, есесіне интерьері өте әдемі. "
+    "Уақытты босқа өткізгіңіз келсе, таптырмас орын!"
+)
+
+RUSSIAN_MIXED_SAMPLE = (
+    "Заказывал ноутбук с доставкой курьером. Сам ноутбук отличный: экран яркий, "
+    "работает тихо, батарею держит больше восьми часов. Но служба доставки испортила впечатление — "
+    "курьер перенёс визит на следующий день без предупреждения, а оператор в чате отвечал шаблонными фразами. "
+    "В итоге техникой доволен, но логистику магазину нужно срочно подтянуть."
+)
+
 
 def fmt_num(value, decimals=2):
     """Форматирует десятичное число для интерфейса через запятую."""
@@ -72,8 +98,8 @@ def fmt_pct(value, decimals=1):
 
 
 def fmt_int(value):
-    """Форматирует целое число с неразрывным пробелом для разрядов тысяч."""
-    return f"{int(round(value)):,}".replace(",", " ")
+    """Форматирует целое число с узким неразрывным пробелом для разрядов тысяч."""
+    return f"{int(round(value)):,}".replace(",", "\u202f")
 
 
 def clean_text(text):
@@ -247,7 +273,12 @@ def analyze(models, text):
     }
 
 
-def show_results(result, labels, labels_kk):
+def _transfer_to_gemini(source_text):
+    st.session_state["gemini_text_input"] = source_text
+    st.session_state["analysis_mode"] = GEMINI_MODE_LABEL
+
+
+def show_results(result, labels, labels_kk, raw_text):
     chunks, weights, p_pos, emo = result["chunks"], result["weights"], result["p_pos"], result["emo"]
     overall_pos = float(weighted_mean(p_pos, weights))
     overall_emo = weighted_mean(emo, weights)
@@ -375,6 +406,13 @@ def show_results(result, labels, labels_kk):
                     </div>
                 </div>
             """)
+
+    st.button(
+        "Осы мәтінді «Мәтінді талдау · Gemini» режимінде ашу →",
+        key="send_to_gemini",
+        on_click=_transfer_to_gemini,
+        args=(raw_text,),
+    )
 
 
 def show_emotion_chart(labels, labels_kk, scores):
@@ -506,7 +544,8 @@ def show_models_and_details():
                     <div class="nlp-model-role">Тақырып және мазмұн</div>
                     <div class="nlp-model-name">Google Gemini</div>
                     <p>Қазақ және орыс тіліндегі ұзын мәтіндердің тақырыбын, қысқаша мазмұнын,
-                       тональдылығы мен эмоцияларын және мәтіннен алынған дәйексөздерді көрсетеді.</p>
+                       жағымды және теріс тұстарын, сарказм белгісін, эмоцияларын және
+                       мәтіннен алынған дәйексөздерді көрсетеді.</p>
                 </article>
             </div>
         </section>
@@ -544,7 +583,7 @@ def show_models_and_details():
                             <span class="arrow">→</span>
                             <span class="step step-cyan">Gemini API</span>
                             <span class="arrow">→</span>
-                            <span class="step step-result">Тақырып, қысқаша мазмұн, тональдылық, эмоциялар және мәтіннен алынған дәйексөздер</span>
+                            <span class="step step-result">Тақырып, қысқаша мазмұн, жағымды/теріс тұстар, тональдылық, эмоциялар және мәтіннен алынған дәйексөздер</span>
                         </div>
                     </div>
                 </div>
@@ -611,20 +650,27 @@ def show_models_and_details():
 def main():
     st.set_page_config(page_title="Kazakh NLP Analyzer", layout="wide")
     show_header()
-    review_mode, gemini_mode = "Пікірді талдау", "Мәтінді талдау · Gemini"
+    if "analysis_mode" not in st.session_state:
+        st.session_state["analysis_mode"] = REVIEW_MODE_LABEL
+
     with st.container(key="nlp_workspace"):
         mode = st.radio(
             "Талдау түрі",
-            (review_mode, gemini_mode),
+            (REVIEW_MODE_LABEL, GEMINI_MODE_LABEL),
+            key="analysis_mode",
             horizontal=True,
             label_visibility="collapsed",
         )
-        if mode == gemini_mode:
+        if mode == GEMINI_MODE_LABEL:
             show_gemini_mode()
         else:
             show_review_mode()
 
     show_models_and_details()
+
+
+def _apply_gemini_preset(sample_text):
+    st.session_state["gemini_text_input"] = sample_text
 
 
 def show_gemini_mode():
@@ -650,12 +696,42 @@ def show_gemini_mode():
         st.info("Бұл режимді қосу үшін Secrets бөлімінде GEMINI_API_KEY көрсетіңіз.")
         return
 
+    if "gemini_text_input" not in st.session_state:
+        st.session_state["gemini_text_input"] = ""
+
+    gemini_presets = [
+        ("Аралас пікір (үстел)", LONG_REVIEW),
+        ("Ұзын мәтін (коммуналдық төлем)", LONG_STORY),
+        ("Сарказм үлгісі", SARCASM_SAMPLE),
+        ("Орысша аралас пікір", RUSSIAN_MIXED_SAMPLE),
+    ]
+
+    st.html('<div class="nlp-preset-label">Дайын үлгілер</div>')
+    with st.container(key="nlp_gemini_presets"):
+        cols = st.columns([1.25, 1.55, 1.05, 1.25, 0.75], gap="small")
+        for col, (label, sample) in zip(cols[:-1], gemini_presets):
+            col.button(
+                label,
+                key=f"gemini_preset_{label}",
+                on_click=_apply_gemini_preset,
+                args=(sample,),
+                width="stretch",
+            )
+        cols[-1].button(
+            "Тазалау",
+            key="gemini_preset_clear",
+            on_click=_apply_gemini_preset,
+            args=("",),
+            width="stretch",
+        )
+
     with st.form("gemini_analysis"):
         raw_text = st.text_area(
             "Қазақша немесе орысша мәтін",
+            key="gemini_text_input",
             max_chars=MAX_TEXT_CHARS,
             height=210,
-            placeholder="Талдауға арналған мәтінді осында енгізіңіз…",
+            placeholder="Талдауға арналған мәтінді осында енгізіңіз немесе жоғарыдағы үлгіні таңдаңыз…",
         )
         submitted = st.form_submit_button("Талдау", type="primary")
     if not submitted:
@@ -674,8 +750,44 @@ def show_gemini_mode():
             return
 
     tone_labels = {"positive": "Оң", "negative": "Теріс", "neutral": "Бейтарап", "mixed": "Аралас"}
+    lang_labels = {
+        "kk": "Қазақ тілі",
+        "ru": "Орыс тілі",
+        "mixed": "Қазақ / орыс тілдері",
+        "other": "Басқа тіл",
+    }
     tone_kk = tone_labels[result.tone]
+    lang_kk = lang_labels.get(result.language, "Қазақ тілі")
     badge_cls, card_cls = _tone_classes(tone_kk)
+
+    kw_html = "".join(
+        f'<span class="nlp-kw-pill">{html.escape(kw)}</span>'
+        for kw in result.keywords
+    )
+    pills_block = f"""
+        <div class="nlp-pill-row">
+            <span class="nlp-lang-pill">{html.escape(lang_kk)}</span>
+            {kw_html}
+        </div>
+    """
+
+    tone_note_html = (
+        f'<div class="nlp-subnote">{html.escape(result.tone_explanation)}</div>'
+        if result.tone_explanation
+        else ""
+    )
+
+    sarcasm_html = ""
+    if result.sarcasm_detected:
+        sarcasm_desc = html.escape(result.sarcasm_note) if result.sarcasm_note else (
+            "Мәтінде сырттай жағымды сөздер астарында сыни немесе кекесін мағына бар."
+        )
+        sarcasm_html = f"""
+            <div class="nlp-sarcasm-banner">
+                <strong>Сарказм / астарлы мағына байқалды</strong>
+                {sarcasm_desc}
+            </div>
+        """
 
     st.html(f"""
         <section class="nlp-grid-2" lang="kk">
@@ -684,6 +796,7 @@ def show_gemini_mode():
                 <div class="nlp-card-value" style="font-size: 1.14rem; line-height: 1.4;">
                     {html.escape(result.topic)}
                 </div>
+                {pills_block}
             </div>
             <div class="nlp-card {card_cls}">
                 <div class="nlp-card-label">Жалпы тональдылық</div>
@@ -691,6 +804,8 @@ def show_gemini_mode():
                     <span class="nlp-card-value">{html.escape(tone_kk)}</span>
                     <span class="nlp-badge {badge_cls}">{html.escape(tone_kk)}</span>
                 </div>
+                {tone_note_html}
+                {sarcasm_html}
             </div>
         </section>
         <div class="nlp-card" style="margin-bottom: 1rem;">
@@ -701,6 +816,34 @@ def show_gemini_mode():
         </div>
     """)
 
+    if result.positive_points or result.negative_points:
+        pos_body = (
+            '<ul class="nlp-points-list">'
+            + "".join(f"<li>{html.escape(pt)}</li>" for pt in result.positive_points)
+            + "</ul>"
+            if result.positive_points
+            else '<p class="nlp-points-empty">Мәтінде айқын жағымды тұстар көрсетілмеген.</p>'
+        )
+        neg_body = (
+            '<ul class="nlp-points-list">'
+            + "".join(f"<li>{html.escape(pt)}</li>" for pt in result.negative_points)
+            + "</ul>"
+            if result.negative_points
+            else '<p class="nlp-points-empty">Мәтінде шағымдар немесе теріс тұстар көрсетілмеген.</p>'
+        )
+        st.html(f"""
+            <section class="nlp-grid-2" lang="kk" style="margin-top: 0;">
+                <div class="nlp-card nlp-card-pos">
+                    <div class="nlp-card-label">Жағымды тұстары</div>
+                    {pos_body}
+                </div>
+                <div class="nlp-card nlp-card-neg">
+                    <div class="nlp-card-label">Ескертулер мен кемшіліктер</div>
+                    {neg_body}
+                </div>
+            </section>
+        """)
+
     st.html("""
         <div class="nlp-section-head nlp-section-head-stack">
             <h3>Мәтіндегі эмоциялар мен дәйексөздер</h3>
@@ -710,13 +853,28 @@ def show_gemini_mode():
     if result.emotions:
         cards = []
         for emotion in result.emotions:
+            core_kk = BASE_CATEGORY_KK.get(emotion.base_category)
+            cat_badge = (
+                f'<span class="nlp-quote-cat">Базалық санат: {html.escape(core_kk)}</span>'
+                if core_kk
+                else ""
+            )
+            reason_html = (
+                f'<p class="nlp-quote-reason">{html.escape(emotion.reason)}</p>'
+                if emotion.reason
+                else ""
+            )
             cards.append(f"""
                 <div class="nlp-quote-card">
                     <div class="nlp-quote-top">
                         <span class="nlp-quote-emotion">{html.escape(emotion.label)}</span>
-                        <span class="nlp-quote-source">Мәтіннен алынған</span>
+                        <div class="nlp-quote-badges">
+                            {cat_badge}
+                            <span class="nlp-quote-source">Мәтіннен алынған</span>
+                        </div>
                     </div>
                     <p class="nlp-quote-text">«{html.escape(emotion.quote)}»</p>
+                    {reason_html}
                 </div>
             """)
         st.html(f'<div class="nlp-quote-list">{"".join(cards)}</div>')
@@ -827,7 +985,7 @@ def show_review_mode():
     finished = perf_counter()
 
     info = models["emo_info"]
-    show_results(result, info["label_order"], info["label_names_kk"])
+    show_results(result, info["label_order"], info["label_names_kk"], raw_text)
 
     peak_mib = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
     with st.expander("Техникалық ақпарат"):
