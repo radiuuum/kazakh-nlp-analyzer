@@ -1,0 +1,150 @@
+@font-face {
+    font-family: "NLP Sans";
+    src: url("data:font/woff;base64,__SANS__") format("woff");
+    font-weight: 400;
+    font-display: swap;
+}
+@font-face {
+    font-family: "NLP Sans";
+    src: url("data:font/woff;base64,__SANS_BOLD__") format("woff");
+    font-weight: 700;
+    font-display: swap;
+}
+@font-face {
+    font-family: "NLP Serif";
+    src: url("data:font/woff;base64,__SERIF__") format("woff");
+    font-weight: 700;
+    font-display: swap;
+}
+.stApp {
+    background: #f8f6ef;
+    color: #172f28;
+}
+.stApp, .stApp button, .stApp input, .stApp textarea {
+    font-family: "NLP Sans", system-ui, sans-serif;
+}
+[data-testid="stHeader"] {
+    background: #f8f6ef;
+}
+[data-testid="stMainBlockContainer"] {
+    max-width: 1540px;
+    padding: 4.25rem clamp(1rem, 3vw, 3.3rem) 3rem;
+}
+.nlp-cover {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    align-items: center;
+    min-height: clamp(290px, 30vw, 425px);
+    background: #0e2b24;
+    border-radius: 24px;
+    overflow: hidden;
+}
+.nlp-cover img, .nlp-cover::after {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+}
+.nlp-cover img {
+    object-fit: cover;
+    object-position: center;
+}
+.nlp-cover::after {
+    content: "";
+    background: linear-gradient(90deg, #0e2b24 0%, #0e2b24ed 30%, #0e2b2470 55%, transparent 76%);
+}
+.nlp-cover .nlp-copy {
+    width: min(60%, 790px);
+    padding: clamp(28px, 5vw, 74px);
+}
+.nlp-cover h1 {
+    font: 700 clamp(2.5rem, 5vw, 5.2rem)/1.04 "NLP Serif", Georgia, serif;
+    letter-spacing: -.045em;
+    color: #fff7e4;
+    margin: 0 0 1rem;
+    padding: 0;
+}
+.nlp-cover p {
+    max-width: 34ch;
+    margin: 0;
+    color: #f0eadb;
+    font-size: clamp(.97rem, 1.44vw, 1.2rem);
+    line-height: 1.65;
+}
+.st-key-nlp_workspace {
+    margin-top: .75rem;
+}
+.st-key-nlp_workspace h2, .nlp-project h2 {
+    font: 700 clamp(1.25rem, 2vw, 1.75rem)/1.25 "NLP Serif", Georgia, serif;
+    letter-spacing: -.025em;
+    padding-top: 0;
+}
+.st-key-nlp_workspace [data-testid="stForm"],
+.st-key-nlp_workspace [data-testid="stMetric"] {
+    background: #fffdf7;
+    border: 1px solid #ded9c8;
+    border-radius: 16px;
+    padding: 1rem;
+}
+.st-key-nlp_workspace [data-testid="stForm"] textarea {
+    background: #f5f2e9;
+    color: #172f28;
+    line-height: 1.6;
+}
+.st-key-nlp_workspace [data-testid="stFormSubmitButton"] button[kind="primaryFormSubmit"] {
+    background: #155446;
+    border-color: #155446;
+    color: white;
+}
+.st-key-nlp_workspace [data-testid="stFormSubmitButton"] button[kind="primaryFormSubmit"]:hover {
+    background: #10392f;
+}
+.st-key-nlp_workspace [role="radiogroup"] {
+    gap: .45rem;
+}
+.st-key-nlp_workspace [role="radiogroup"] > label {
+    padding: .45rem .7rem;
+    border: 1px solid #ded9c8;
+    border-radius: 9px;
+    margin: 0;
+    background: #fffdf7;
+}
+.nlp-project {
+    border: 1px solid #ded9c8;
+    border-radius: 16px;
+    background: #eeeade;
+    padding: clamp(16px, 2.1vw, 26px);
+    color: #172f28;
+}
+.nlp-project h2 {
+    color: #172f28;
+    margin: 0 0 .8rem;
+    padding-bottom: 0;
+}
+.nlp-project dl, .nlp-project dd { margin: 0; }
+.nlp-project dl > div {
+    padding: .8rem 0;
+    border-top: 1px solid #d8d0be;
+}
+.nlp-project dl > div:last-child { padding-bottom: 0; }
+.nlp-project dt { font-weight: 700; }
+.nlp-project dd {
+    color: #3d5249;
+    font-size: .88rem;
+    line-height: 1.55;
+    padding-top: .25rem;
+}
+.nlp-project .nlp-score { color: #155446; font-weight: 700; }
+@media (max-width: 640px) {
+    [data-testid="stMainBlockContainer"] { padding-top: 3.65rem; }
+    .nlp-cover { min-height: 335px; align-items: end; border-radius: 16px; }
+    .nlp-cover img { height: 59%; object-position: 76% 50%; }
+    .nlp-cover::after {
+        background: linear-gradient(180deg, transparent 5%, #0e2b2450 32%, #0e2b24 56%);
+    }
+    .nlp-cover .nlp-copy { width: 100%; padding: 1.15rem; }
+    .nlp-cover h1 { font-size: clamp(2rem, 8vw, 2.6rem); margin-bottom: .5rem; }
+    .nlp-cover p { font-size: .9rem; line-height: 1.5; }
+}
