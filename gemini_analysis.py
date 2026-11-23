@@ -1,6 +1,8 @@
 """Gemini text analysis shared by Streamlit and Colab."""
 
+import logging
 import re
+import time
 import unicodedata
 from typing import Literal
 
@@ -10,8 +12,12 @@ from httpx import RequestError
 from pydantic import BaseModel, Field, ValidationError
 
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 MAX_TEXT_CHARS = 20_000
+MAX_RETRIES = 3
+RETRYABLE_HTTP_CODES = {429, 500, 502, 503, 504}
 
 BaseEmotionCategory = Literal[
     "joy",
@@ -79,7 +85,12 @@ class TextAnalysis(BaseModel):
 
 
 class GeminiAnalysisError(RuntimeError):
-    """An error safe to display without exposing request details."""
+    """An error safe to display without exposing API keys."""
+
+    def __init__(self, message: str, *, status_code: int | None = None, detail: str = ""):
+        super().__init__(message)
+        self.status_code = status_code
+        self.detail = detail
 
 
 _QUOTE_TRANSLATION = str.maketrans({
@@ -139,7 +150,6 @@ def _strip_outer_wrapping_quotes(text: str) -> str:
     for left, right in pairs:
         if len(s) >= 2 and s.startswith(left) and s.endswith(right):
             inner = s[len(left) : -len(right)].strip()
-            # Only unwrap if inner doesn't contain the closing delimiter prematurely
             if right not in inner:
                 return inner
     return s
@@ -185,6 +195,21 @@ def _clean_items(items: list[str], limit: int) -> list[str]:
     return cleaned
 
 
+def _friendly_api_error(code: int | None) -> str:
+    messages = {
+        400: "Сұрау параметрлері қабылданбады (HTTP 400). Модель атауын немесе API кілтін тексеріңіз.",
+        401: "API кілті жарамсыз (HTTP 401). Secrets бөліміндегі GEMINI_API_KEY мәнін тексеріңіз.",
+        403: "Бұл жобада таңдалған модельге қолжетімділік шектелген (HTTP 403).",
+        404: "Таңдалған модель табылмады (HTTP 404). GEMINI_MODEL параметрін тексеріңіз.",
+        429: "Сұрау лимитіне жетті (HTTP 429). Бірнеше секунд күтіп, қайта көріңіз.",
+        500: "Сыртқы AI серверінде уақытша ішкі қате болды (HTTP 500). Қайталап көріңіз.",
+        502: "Сыртқы AI серверімен байланыс үзілді (HTTP 502). Қайталап көріңіз.",
+        503: "Google AI сервері қазір уақытша жүктелген (HTTP 503). Жүйе 3 рет қайталап көрді — 10–20 секундтан соң қайта басып көріңіз.",
+        504: "Сыртқы AI сервері жауап беруге үлгермеді (HTTP 504). Қайталап көріңіз.",
+    }
+    return messages.get(code, f"Сыртқы AI қызметі сұрауды өңдей алмады (HTTP {code}).")
+
+
 def analyze_with_gemini(text: str, api_key: str, model: str = DEFAULT_MODEL) -> TextAnalysis:
     text = text.strip()
     if not text or len(text) > MAX_TEXT_CHARS:
@@ -192,48 +217,76 @@ def analyze_with_gemini(text: str, api_key: str, model: str = DEFAULT_MODEL) -> 
     if not api_key.strip():
         raise ValueError("GEMINI_API_KEY көрсетілмеген.")
 
-    try:
-        with genai.Client(
-            api_key=api_key,
-            http_options=types.HttpOptions(
-                timeout=35_000,
-                retry_options=types.HttpRetryOptions(attempts=1),
-            ),
-        ) as client:
-            response = client.models.generate_content(
-                model=model,
-                contents=text,
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,
-                    response_mime_type="application/json",
-                    response_schema=TextAnalysis,
-                    temperature=0.1,
-                    max_output_tokens=2500,
-                ),
-            )
-    except errors.APIError as exc:
-        messages = {
-            400: "Gemini сұрауды қабылдамады. API кілтін және модель параметрлерін тексеріңіз.",
-            401: "Gemini API кілтін тексеріңіз.",
-            403: "Бұл жобаға Gemini моделіне кіруге рұқсат берілмеген.",
-            404: "Gemini моделі табылмады. GEMINI_MODEL параметрін тексеріңіз.",
-            429: "Gemini сұрау лимитіне жетті. Кейінірек қайта көріңіз.",
-        }
-        raise GeminiAnalysisError(
-            messages.get(exc.code, f"Gemini қызметі сұрауды өңдей алмады (HTTP {exc.code}).")
-        ) from None
-    except RequestError:
-        raise GeminiAnalysisError("Gemini қызметіне қосылу мүмкін болмады.") from None
+    response = None
+    last_code: int | None = None
+    last_detail = ""
 
-    response_text = response.text
-    if not response_text:
-        raise GeminiAnalysisError("Gemini мәтіндік жауап қайтармады.")
+    with genai.Client(
+        api_key=api_key,
+        http_options=types.HttpOptions(
+            timeout=45_000,
+            retry_options=types.HttpRetryOptions(attempts=1),
+        ),
+    ) as client:
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=text,
+                    config=types.GenerateContentConfig(
+                        system_instruction=SYSTEM_INSTRUCTION,
+                        response_mime_type="application/json",
+                        response_schema=TextAnalysis,
+                        temperature=0.1,
+                        max_output_tokens=2500,
+                    ),
+                )
+                break
+            except errors.APIError as exc:
+                code = getattr(exc, "code", None)
+                last_code = code
+                last_detail = f"model={model} | attempt={attempt}/{MAX_RETRIES} | HTTP {code}: {getattr(exc, 'message', str(exc))}"
+                logger.warning("Gemini APIError: %s", last_detail)
+                if code in RETRYABLE_HTTP_CODES and attempt < MAX_RETRIES:
+                    time.sleep(1.4 * attempt)
+                    continue
+                raise GeminiAnalysisError(
+                    _friendly_api_error(code),
+                    status_code=code,
+                    detail=last_detail,
+                ) from None
+            except RequestError as exc:
+                last_detail = f"model={model} | attempt={attempt}/{MAX_RETRIES} | network error: {type(exc).__name__}"
+                logger.warning("Gemini RequestError: %s", last_detail)
+                if attempt < MAX_RETRIES:
+                    time.sleep(1.4 * attempt)
+                    continue
+                raise GeminiAnalysisError(
+                    "Сыртқы AI қызметіне қосылу мүмкін болмады. Интернет байланысын тексеріп, қайта көріңіз.",
+                    detail=last_detail,
+                ) from None
+
+    if response is None or not response.text:
+        raise GeminiAnalysisError(
+            "Сыртқы AI қызметі мәтіндік жауап қайтармады.",
+            status_code=last_code,
+            detail=last_detail or f"model={model} | empty response.text",
+        )
+
     try:
-        result = TextAnalysis.model_validate_json(response_text)
-    except ValidationError:
-        raise GeminiAnalysisError("Gemini жауабының пішімі дұрыс емес.") from None
+        result = TextAnalysis.model_validate_json(response.text)
+    except ValidationError as exc:
+        logger.warning("Gemini JSON validation failed: %s", exc)
+        raise GeminiAnalysisError(
+            "Жауап пішімі күтілген құрылымға сәйкес келмеді. Қайталап көріңіз.",
+            detail=f"model={model} | ValidationError",
+        ) from None
+
     if not result.topic.strip() or not result.summary.strip():
-        raise GeminiAnalysisError("Gemini тақырыпты немесе қысқаша мазмұнды қайтармады.")
+        raise GeminiAnalysisError(
+            "Мәтіннің тақырыбы немесе қысқаша мазмұны анықталмады.",
+            detail=f"model={model} | empty topic/summary",
+        )
 
     result.topic = re.sub(r"\s+", " ", result.topic).strip()
     result.summary = re.sub(r"\s+", " ", result.summary).strip()
